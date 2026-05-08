@@ -2,9 +2,17 @@ import pandas as pd
 import random
 import uuid
 import os
+import argparse
 from datetime import datetime, timedelta
 
-name = str(input("Digite um nome para o arquivo de eventos (sem extensão): ")).strip()
+# Configuração de argumentos de linha de comando
+parser = argparse.ArgumentParser(description='Gerador de eventos sintéticos para Kafka.')
+parser.add_argument('nome_da_pasta', type=str, help='Nome da pasta onde os arquivos CSV serão salvos')
+args = parser.parse_args()
+
+output_dir = args.nome_da_pasta
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
 
 TOTAL_CLIENTS = 100
 MAX_ACCOUNTS_PER_CLIENT = 2  
@@ -49,10 +57,9 @@ for i in range(TOTAL_CLIENTS):
 all_accounts = [acc for c in clients for acc in c["accounts"]]
 
 #--- GERAÇÃO DE EVENTOS ---
-consolidated_events = []
-
 for day in range(DAYS_TO_GENERATE):
     day_start = BASE_DATE + timedelta(days=day)
+    day_events = []
     
     def add_event(e_type, user, ts, **kwargs):
         acc_id = kwargs.get("account_id", random.choice(user["accounts"]))
@@ -73,7 +80,7 @@ for day in range(DAYS_TO_GENERATE):
             "amount": kwargs.get("amount", None),
             "status": kwargs.get("status", "COMPLETED" if e_type != "TRANSACTION" else "REQUESTED")
         }
-        consolidated_events.append(event)
+        day_events.append(event)
 
     #EVENTOS NORMAIS (Ocorrem todos os dias para clientes aleatórios)
     for _ in range(NORMAL_TX_VOLUME):
@@ -139,15 +146,14 @@ for day in range(DAYS_TO_GENERATE):
             add_event("PASSWORD_CHANGE", c, ts_f + timedelta(seconds=30), device_id=dev_atq, ip=ip_atq)
             add_event("TRANSACTION", c, ts_f + timedelta(minutes=2), device_id=dev_atq, ip=ip_atq, amount=7000.00)
 
-    print(f"Dia {day+1} ({day_start.strftime('%Y-%m-%d')}) gerado...")
+    # Salva os eventos do dia
+    df_day = pd.DataFrame(day_events)
+    df_day = df_day.sort_values(by='timestamp').reset_index(drop=True)
+    day_str = day_start.strftime('%Y-%m-%d')
+    events_filename = os.path.join(output_dir, f"events_{day_str}.csv")
+    df_day.to_csv(events_filename, index=False)
+    print(f"Dia {day+1} ({day_str}) gerado e salvo em '{events_filename}'.")
 
-# Salva o arquivo consolidado
-df_all = pd.DataFrame(consolidated_events)
-df_all = df_all.sort_values(by='timestamp').reset_index(drop=True)
-events_filename = os.path.join('.', f"all_events_{name}.csv")
-df_all.to_csv(events_filename, index=False)
-print(f"\nTotal de {len(df_all)} eventos salvos em '{events_filename}'.")
-
-profiles_filename = os.path.join('.', f"customer_profiles_{name}.csv")
+profiles_filename = os.path.join(output_dir, "customer_profiles.csv")
 pd.DataFrame(clients).to_csv(profiles_filename, index=False)
-print(f"Perfis de clientes salvos em '{profiles_filename}'.")
+print(f"\nPerfis de clientes salvos em '{profiles_filename}'.")
