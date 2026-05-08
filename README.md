@@ -118,7 +118,7 @@ Eventos de autenticação e alterações de contexto do usuário:
 }
 ```
 
-Outros `event_type` possíveis: `login`, `failed_auth`, `device_change`, `limit_change`, `beneficiary_added`.
+Outros `event_type` possíveis: `login`, `failed_auth`, `device_change`.
 
 ### `customer.profile`
 
