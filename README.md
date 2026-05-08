@@ -18,7 +18,7 @@ O projeto atende ao enunciado em quatro pontos centrais:
 
 - Implementa um sistema de monitoramento orientado a eventos com Kafka como middleware de comunicação [1].
 - Monitora continuamente eventos produzidos em tempo real por produtores e consumidos por serviços especializados [1].
-- Define pelo menos três situações de interesse detectadas a partir de eventos primitivos [1].
+- Define quatro situações de interesse detectadas a partir de eventos primitivos [1].
 - Inclui um caso mais complexo em que um consumidor infere conhecimento e republica eventos derivados no Kafka [1].
 
 Além disso, como o enunciado permite o uso de dados simulados em tempo real quando não houver API pública adequada para o domínio escolhido, a simulação de um ambiente financeiro é plenamente válida para o trabalho [1].
@@ -80,9 +80,11 @@ Essa separação ajuda a demonstrar claramente o papel de cada consumidor e o en
 
 ## Modelos de eventos
 
-### Evento primitivo de transação
+A seguir estão exemplos de mensagens publicadas em cada tópico.
 
-Um evento de transação pode conter campos como:
+### `transactions.raw`
+
+Evento primitivo de transação financeira:
 
 ```json
 {
@@ -101,22 +103,131 @@ Um evento de transação pode conter campos como:
 }
 ```
 
-### Eventos complementares de contexto
+### `auth.events`
 
-Além da transação, o sistema pode produzir:
+Eventos de autenticação e alterações de contexto do usuário:
 
-- `login_event`
-- `failed_auth_event`
-- `device_change_event`
-- `password_change_event`
-- `limit_change_event`
-- `beneficiary_added_event`
+```json
+{
+  "event_id": "auth-456",
+  "user_id": "u-7",
+  "event_type": "password_change",
+  "timestamp": "2026-04-24T11:58:00Z",
+  "device_id": "dev-21",
+  "ip_address": "177.10.2.8"
+}
+```
 
-Esses eventos dão contexto ao comportamento do usuário e tornam a detecção de fraude mais interessante e mais aderente ao conceito de processamento orientado a eventos.
+Outros `event_type` possíveis: `login`, `failed_auth`, `device_change`, `limit_change`, `beneficiary_added`.
+
+### `customer.profile`
+
+Informações de perfil e comportamento esperado do cliente:
+
+```json
+{
+  "user_id": "u-7",
+  "account_id": "acc-88",
+  "average_transaction_amount": 250.00,
+  "typical_merchant_categories": ["grocery", "transport"],
+  "trusted_devices": ["dev-21", "dev-05"],
+  "typical_hours": "08:00-22:00",
+  "updated_at": "2026-04-24T10:00:00Z"
+}
+```
+
+### `fraud.alerts`
+
+Alertas gerados por regras simples ou compostas:
+
+```json
+{
+  "alert_id": "alert-789",
+  "user_id": "u-7",
+  "transaction_id": "tx-123",
+  "alert_type": "PASSWORD_CHANGE_THEN_HIGH_TRANSACTION",
+  "severity": "HIGH",
+  "reason": "Senha alterada em 2026-04-24T11:58:00Z, transacao de R$ 4800.50 em 2026-04-24T12:00:00Z (2 min depois)",
+  "timestamp": "2026-04-24T12:00:00Z"
+}
+```
+
+### `risk.scores`
+
+Evento derivado contendo score de risco calculado:
+
+```json
+{
+  "transaction_id": "tx-123",
+  "account_id": "acc-88",
+  "user_id": "u-7",
+  "risk_score": 85,
+  "reasons": [
+    "high_amount",
+    "new_device",
+    "password_change_recent"
+  ],
+  "decision": "REVIEW",
+  "timestamp": "2026-04-24T12:00:05Z"
+}
+```
+
+### `transactions.blocked`
+
+Transação bloqueada por alto risco:
+
+```json
+{
+  "transaction_id": "tx-123",
+  "account_id": "acc-88",
+  "user_id": "u-7",
+  "type": "PIX",
+  "amount": 4800.50,
+  "timestamp": "2026-04-24T12:00:00Z",
+  "block_reason": "risk_score_above_threshold",
+  "risk_score": 85,
+  "blocked_at": "2026-04-24T12:00:05Z"
+}
+```
+
+### `transactions.approved`
+
+Transação aprovada automaticamente:
+
+```json
+{
+  "transaction_id": "tx-124",
+  "account_id": "acc-88",
+  "user_id": "u-7",
+  "type": "PIX",
+  "amount": 150.00,
+  "timestamp": "2026-04-24T12:05:00Z",
+  "risk_score": 15,
+  "approved_at": "2026-04-24T12:05:01Z"
+}
+```
+
+### `transactions.review`
+
+Transação enviada para análise manual:
+
+```json
+{
+  "transaction_id": "tx-123",
+  "account_id": "acc-88",
+  "user_id": "u-7",
+  "type": "PIX",
+  "amount": 4800.50,
+  "timestamp": "2026-04-24T12:00:00Z",
+  "risk_score": 85,
+  "review_reason": "multiple_risk_signals",
+  "sent_to_review_at": "2026-04-24T12:00:05Z"
+}
+```
 
 ## Situações de interesse mínimas
 
-O enunciado exige pelo menos três situações de interesse detectadas a partir de eventos primitivos consumidos do Kafka [1].
+O enunciado exige pelo menos três situações de interesse detectadas a partir de eventos primitivos consumidos do Kafka [1]. Este projeto define quatro situações mínimas, superando o requisito base.
 
 ### Situação 1: transação com valor muito acima do padrão do cliente
 
@@ -129,7 +240,6 @@ Quando uma transação tem valor muito superior ao comportamento histórico da c
 #### Ação
 
 - Publicar evento em `fraud.alerts`.
-- Exibir no dashboard como alerta amarelo.
 
 ### Situação 2: muitas transações em uma janela curta de tempo
 
@@ -141,34 +251,31 @@ Quando a mesma conta realiza várias transações em poucos segundos ou minutos,
 
 #### Ação
 
-- Publicar alerta de alta frequência.
-- Incrementar score de risco.
+- Publicar evento em `fraud.alerts`.
 
-### Situação 3: transação em dispositivo ou IP incomum
+### Situação 3: transação em dispositivo não reconhecido
 
-Uma transação originada de um dispositivo não reconhecido ou de um IP ainda não observado para aquele usuário pode representar tomada de conta.
+Uma transação originada de um `device_id` nunca antes observado para aquele usuário pode representar tomada de conta ou uso de um aparelho clonado/roubado.
 
 #### Exemplo de regra
 
-- Se `device_id` não existir no histórico confiável do usuário, gerar evento suspeito.
+- Se `device_id` da transação não existir no histórico confiável do `user_id`, gerar evento suspeito.
 
 #### Ação
 
-- Produzir alerta.
-- Solicitar autenticação adicional, dependendo do score acumulado.
+- Publicar evento em `fraud.alerts`.
 
-## Outras regras opcionais
+### Situação 4: alteração de senha seguida de transação relevante em poucos minutos
 
-Para enriquecer o projeto, outras regras podem ser adicionadas:
+Quando um usuário altera sua senha e, em um curto intervalo de tempo (ex: 5 minutos), realiza uma transação de valor elevado ou fora de seu padrão histórico, isso pode indicar que a conta foi comprometida e o invasor está agindo rapidamente antes que o usuário legítimo perceba a invasão.
 
-- Transferência de alto valor na madrugada.
-- Cadastro de novo favorecido seguido de PIX alto.
-- Alteração de senha seguida de transação relevante em poucos minutos.
-- Múltiplas falhas de autenticação antes da transação.
-- Sequência de transferências para vários destinatários inéditos.
-- Operação muito fora do horário habitual do cliente.
+#### Exemplo de regra
 
-Essas regras ajudam a demonstrar evolução do projeto e podem ser apresentadas como backlog ou extensões futuras.
+- Se um evento `password_change_event` ocorrer para um `user_id` e, nos próximos 5 minutos, uma transação desse mesmo `user_id` tiver `amount > 1000` ou `amount > media_historica * 3`, gerar alerta de alto risco.
+
+#### Ação
+
+- Publicar evento em `fraud.alerts` com severidade ALTA.
 
 ## Situação complexa com evento derivado
 
@@ -384,7 +491,7 @@ Para a apresentação de 10 a 15 minutos mencionada no enunciado [1], um roteiro
 2. Mostrar a arquitetura orientada a eventos.
 3. Explicar os tópicos Kafka.
 4. Mostrar os eventos primitivos.
-5. Explicar as três situações de interesse.
+5. Explicar as quatro situações de interesse.
 6. Demonstrar o evento derivado de score de risco.
 7. Executar uma simulação ao vivo.
 8. Mostrar o dashboard reagindo em tempo real.
