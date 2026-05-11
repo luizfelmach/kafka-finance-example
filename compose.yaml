@@ -1,6 +1,5 @@
 services:
   kafka-1:
-    image: kafka-faketime:latest
     build:
       dockerfile: Dockerfile.kafka
     container_name: kafka-1
@@ -22,7 +21,8 @@ services:
       - kafka-net
 
   kafka-2:
-    image: kafka-faketime:latest
+    build:
+      dockerfile: Dockerfile.kafka
     container_name: kafka-2
     hostname: kafka-2
     ports:
@@ -42,7 +42,8 @@ services:
       - kafka-net
 
   kafka-3:
-    image: kafka-faketime:latest
+    build:
+      dockerfile: Dockerfile.kafka
     container_name: kafka-3
     hostname: kafka-3
     ports:
