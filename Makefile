@@ -18,21 +18,16 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "restart" "Restart all services (recreates containers to pick up new env vars)"
 	@echo ""
 	@echo "Java"
-	@printf "  \033[36m%-14s\033[0m %s\n" "build" "Build project JAR on host with Maven"
+	@printf "  \033[36m%-14s\033[0m %s\n" "build" "Build project JAR with Maven"
 	@printf "  \033[36m%-14s\033[0m %s\n" "clean" "Remove local Maven build artifacts"
-	@printf "  \033[36m%-14s\033[0m %s\n" "clients" "Generate clients.json on host"
-	@printf "  \033[36m%-14s\033[0m %s\n" "producer1" "Run Producer1 on host"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer1" "Run Consumer1 on host"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer2" "Run Consumer2 on host"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer3" "Run Consumer3 on host"
+	@printf "  \033[36m%-14s\033[0m %s\n" "clients" "Generate simulated client profiles"
+	@printf "  \033[36m%-14s\033[0m %s\n" "simulate" "Simulate legitimate transactions and auth events"
+	@printf "  \033[36m%-14s\033[0m %s\n" "consumer1" "Run Consumer1"
+	@printf "  \033[36m%-14s\033[0m %s\n" "consumer2" "Run Consumer2"
+	@printf "  \033[36m%-14s\033[0m %s\n" "consumer3" "Run Consumer3"
 	@echo ""
-	@echo "Examples:"
-	@echo "  make up"
-	@echo "  make down"
-	@echo "  make restart"
-	@echo "  make build"
-	@echo "  make clients"
-	@echo "  make producer1"
+	@echo "Kafka"
+	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
 	@echo ""
 
 up: ## Start all services with Docker Compose (builds images if needed)
@@ -65,9 +60,14 @@ clients: build ## Generate clients.json with simulated client metadata
 	java -cp $(JAVA_JAR) com.frauddetection.utils.ClientGenerator 100 $(CLIENTS_FILE)
 	@echo "✓ Clients generated -> $(CLIENTS_FILE)"
 
-producer1: build ## Run Producer1 on host
-	@echo "→ Running Producer1 on host..."
-	java -cp $(JAVA_JAR) com.frauddetection.producers.Producer1
+simulate: build ## Run LegitimateEventProducer on host
+	@echo "→ Running LegitimateEventProducer on host..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.LegitimateEventProducer
+
+listen: ## Listen to a Kafka topic (usage: TOPIC=name make listen)
+	@if [ -z "$(TOPIC)" ]; then echo "Error: TOPIC is not set. Usage: TOPIC=name make listen"; exit 1; fi
+	@echo "→ Listening to topic '$(TOPIC)'..."
+	docker exec -it kafka-1 /opt/kafka/bin/kafka-console-consumer.sh --topic $(TOPIC) --bootstrap-server localhost:9092
 
 consumer1: build ## Run Consumer1 on host
 	@echo "→ Running Consumer1 on host..."
@@ -81,4 +81,4 @@ consumer3: build ## Run Consumer3 on host
 	@echo "→ Running Consumer3 on host..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer3
 
-.PHONY: help up down restart build clean clients producer1 consumer1 consumer2 consumer3
+.PHONY: help up down restart build clean clients simulate listen consumer1 consumer2 consumer3

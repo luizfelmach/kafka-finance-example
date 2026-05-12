@@ -1,6 +1,9 @@
 package com.frauddetection.config;
 
+import com.frauddetection.serialization.JsonSerializer;
 import java.util.Properties;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
 
 public class KafkaConfig {
 
@@ -16,8 +19,18 @@ public class KafkaConfig {
     public static final String TOPIC_TRANSACTIONS_REVIEW = "transactions.review";
 
     public static Properties producerProps() {
-        // TODO: implementar configurações do producer
-        return new Properties();
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS);
+        props.put(
+            ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+            StringSerializer.class.getName()
+        );
+        props.put(
+            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+            JsonSerializer.class.getName()
+        );
+        props.put(ProducerConfig.ACKS_CONFIG, "1");
+        return props;
     }
 
     public static Properties consumerProps(String groupId) {
