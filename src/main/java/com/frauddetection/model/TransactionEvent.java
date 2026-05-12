@@ -9,12 +9,9 @@ public class TransactionEvent {
     private String userId;
     private String type;
     private double amount;
-    private String originCountry;
     private String deviceId;
     private String ipAddress;
-    private String merchantCategory;
     private String destinationAccount;
-    private String status;
 
     public TransactionEvent() {}
 
@@ -24,24 +21,18 @@ public class TransactionEvent {
         String userId,
         String type,
         double amount,
-        String originCountry,
         String deviceId,
         String ipAddress,
-        String merchantCategory,
-        String destinationAccount,
-        String status
+        String destinationAccount
     ) {
         this.transactionId = transactionId;
         this.accountId = accountId;
         this.userId = userId;
         this.type = type;
         this.amount = amount;
-        this.originCountry = originCountry;
         this.deviceId = deviceId;
         this.ipAddress = ipAddress;
-        this.merchantCategory = merchantCategory;
         this.destinationAccount = destinationAccount;
-        this.status = status;
     }
 
     public String getTransactionId() {
@@ -84,14 +75,6 @@ public class TransactionEvent {
         this.amount = amount;
     }
 
-    public String getOriginCountry() {
-        return originCountry;
-    }
-
-    public void setOriginCountry(String originCountry) {
-        this.originCountry = originCountry;
-    }
-
     public String getDeviceId() {
         return deviceId;
     }
@@ -108,28 +91,12 @@ public class TransactionEvent {
         this.ipAddress = ipAddress;
     }
 
-    public String getMerchantCategory() {
-        return merchantCategory;
-    }
-
-    public void setMerchantCategory(String merchantCategory) {
-        this.merchantCategory = merchantCategory;
-    }
-
     public String getDestinationAccount() {
         return destinationAccount;
     }
 
     public void setDestinationAccount(String destinationAccount) {
         this.destinationAccount = destinationAccount;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
     }
 
     @Override
@@ -150,23 +117,14 @@ public class TransactionEvent {
             '\'' +
             ", amount=" +
             amount +
-            ", originCountry='" +
-            originCountry +
-            '\'' +
             ", deviceId='" +
             deviceId +
             '\'' +
             ", ipAddress='" +
             ipAddress +
             '\'' +
-            ", merchantCategory='" +
-            merchantCategory +
-            '\'' +
             ", destinationAccount='" +
             destinationAccount +
-            '\'' +
-            ", status='" +
-            status +
             '\'' +
             '}'
         );
@@ -183,12 +141,9 @@ public class TransactionEvent {
             Objects.equals(accountId, that.accountId) &&
             Objects.equals(userId, that.userId) &&
             Objects.equals(type, that.type) &&
-            Objects.equals(originCountry, that.originCountry) &&
             Objects.equals(deviceId, that.deviceId) &&
             Objects.equals(ipAddress, that.ipAddress) &&
-            Objects.equals(merchantCategory, that.merchantCategory) &&
-            Objects.equals(destinationAccount, that.destinationAccount) &&
-            Objects.equals(status, that.status)
+            Objects.equals(destinationAccount, that.destinationAccount)
         );
     }
 
@@ -200,12 +155,9 @@ public class TransactionEvent {
             userId,
             type,
             amount,
-            originCountry,
             deviceId,
             ipAddress,
-            merchantCategory,
-            destinationAccount,
-            status
+            destinationAccount
         );
     }
 }
