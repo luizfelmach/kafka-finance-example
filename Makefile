@@ -35,6 +35,9 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-unknown-device" "Detect unknown device fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-password-change" "Detect password change fraud"
 	@echo ""
+	@echo "Tmux"
+	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 4 tmux panes with all fraud detectors"
+	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
 	@echo ""
@@ -110,4 +113,17 @@ detect-password-change: build ## Detect password change fraud
 	@echo "→ Running PasswordChangeConsumer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer
 
-.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change detect-high-amount detect-burst detect-unknown-device detect-password-change
+tmux: build ## Open 4 tmux panes with all fraud detectors
+	@echo "→ Starting tmux session with fraud detectors..."
+	tmux new-session -d -s fraud-detection -n detectors
+	tmux split-window -v -t fraud-detection
+	tmux split-window -v -t fraud-detection
+	tmux split-window -v -t fraud-detection
+	tmux send-keys -t fraud-detection:0.0 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer' C-m
+	tmux send-keys -t fraud-detection:0.1 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.BurstTransactionConsumer' C-m
+	tmux send-keys -t fraud-detection:0.2 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer' C-m
+	tmux send-keys -t fraud-detection:0.3 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer' C-m
+	tmux select-layout -t fraud-detection even-vertical
+	tmux attach -t fraud-detection
+
+.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change detect-high-amount detect-burst detect-unknown-device detect-password-change tmux
