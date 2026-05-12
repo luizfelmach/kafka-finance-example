@@ -3,6 +3,7 @@
 
 COMPOSE_FILE := compose.yaml
 JAR_FILE := target/kafka-finance-example-1.0-SNAPSHOT.jar
+CLIENTS_FILE := clients.json
 
 .DEFAULT_GOAL := help
 
@@ -19,6 +20,7 @@ help: ## Show this help message
 	@echo "Java"
 	@printf "  \033[36m%-14s\033[0m %s\n" "build" "Compile the Java project with Maven"
 	@printf "  \033[36m%-14s\033[0m %s\n" "clean" "Clean Maven build artifacts"
+	@printf "  \033[36m%-14s\033[0m %s\n" "clients" "Generate clients.json with simulated client metadata"
 	@printf "  \033[36m%-14s\033[0m %s\n" "producer1" "Run Producer1"
 	@printf "  \033[36m%-14s\033[0m %s\n" "producer2" "Run Producer2"
 	@printf "  \033[36m%-14s\033[0m %s\n" "consumer1" "Run Consumer1"
@@ -30,6 +32,7 @@ help: ## Show this help message
 	@echo "  make down"
 	@echo "  make restart"
 	@echo "  make build"
+	@echo "  make clients"
 	@echo "  make producer1"
 	@echo ""
 
@@ -58,6 +61,11 @@ clean: ## Clean Maven build artifacts
 	@mvn clean -q
 	@echo "✓ Clean complete"
 
+clients: build ## Generate clients.json with simulated client metadata
+	@echo "→ Generating clients metadata..."
+	@java -cp $(JAR_FILE) com.frauddetection.utils.ClientGenerator 100 $(CLIENTS_FILE)
+	@echo "✓ Clients generated -> $(CLIENTS_FILE)"
+
 producer1: build ## Run Producer1
 	@echo "→ Running Producer1..."
 	@java -cp $(JAR_FILE) com.frauddetection.producers.Producer1
@@ -78,4 +86,4 @@ consumer3: build ## Run Consumer3
 	@echo "→ Running Consumer3..."
 	@java -cp $(JAR_FILE) com.frauddetection.consumers.Consumer3
 
-.PHONY: help up down restart build clean producer1 producer2 consumer1 consumer2 consumer3
+.PHONY: help up down restart build clean clients producer1 producer2 consumer1 consumer2 consumer3
