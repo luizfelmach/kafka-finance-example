@@ -26,6 +26,12 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "consumer2" "Run Consumer2"
 	@printf "  \033[36m%-14s\033[0m %s\n" "consumer3" "Run Consumer3"
 	@echo ""
+	@echo "Fraud Producers"
+	@printf "  \033[36m%-14s\033[0m %s\n" "high-amount" "Simulate high amount fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "burst" "Simulate burst transaction fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "unknown-device" "Simulate unknown device fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "password-change" "Simulate password change fraud"
+	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
 	@echo ""
@@ -69,6 +75,22 @@ listen: ## Listen to a Kafka topic (usage: TOPIC=name make listen)
 	@echo "→ Listening to topic '$(TOPIC)'..."
 	docker exec -it kafka-1 /opt/kafka/bin/kafka-console-consumer.sh --topic $(TOPIC) --bootstrap-server localhost:9092
 
+high-amount: build ## Simulate high amount fraud
+	@echo "→ Running HighAmountFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.HighAmountFraudProducer
+
+burst: build ## Simulate burst transaction fraud
+	@echo "→ Running BurstTransactionFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.BurstTransactionFraudProducer
+
+unknown-device: build ## Simulate unknown device fraud
+	@echo "→ Running UnknownDeviceFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.UnknownDeviceFraudProducer
+
+password-change: build ## Simulate password change fraud
+	@echo "→ Running PasswordChangeFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.PasswordChangeFraudProducer
+
 consumer1: build ## Run Consumer1 on host
 	@echo "→ Running Consumer1 on host..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer1
@@ -81,4 +103,4 @@ consumer3: build ## Run Consumer3 on host
 	@echo "→ Running Consumer3 on host..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer3
 
-.PHONY: help up down restart build clean clients simulate listen consumer1 consumer2 consumer3
+.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change consumer1 consumer2 consumer3
