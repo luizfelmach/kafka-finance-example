@@ -44,33 +44,39 @@ public class UnknownDeviceConsumer {
         Runtime.getRuntime().addShutdownHook(
             new Thread(() -> {
                 System.out.println("\nShutting down UnknownDeviceConsumer...");
-                consumer.close();
+                consumer.wakeup();
             })
         );
 
-        while (true) {
-            ConsumerRecords<String, TransactionEvent> records = consumer.poll(
-                Duration.ofMillis(500)
-            );
+        try {
+            while (true) {
+                ConsumerRecords<String, TransactionEvent> records = consumer.poll(
+                    Duration.ofMillis(500)
+                );
 
-            for (ConsumerRecord<String, TransactionEvent> record : records) {
-                TransactionEvent tx = record.value();
-                if (tx == null) continue;
+                for (ConsumerRecord<String, TransactionEvent> record : records) {
+                    TransactionEvent tx = record.value();
+                    if (tx == null) continue;
 
-                String userId = tx.getUserId();
-                String deviceId = tx.getDeviceId();
-                List<String> trusted = trustedDevices.get(userId);
+                    String userId = tx.getUserId();
+                    String deviceId = tx.getDeviceId();
+                    List<String> trusted = trustedDevices.get(userId);
 
-                if (trusted == null || !trusted.contains(deviceId)) {
-                    System.out.printf(
-                        "[ALERT] UNKNOWN_DEVICE | tx=%s | device=%s | user=%s | trusted=%s%n",
-                        tx.getTransactionId(),
-                        deviceId,
-                        userId,
-                        trusted
-                    );
+                    if (trusted == null || !trusted.contains(deviceId)) {
+                        System.out.printf(
+                            "[ALERT] UNKNOWN_DEVICE | tx=%s | device=%s | user=%s | trusted=%s%n",
+                            tx.getTransactionId(),
+                            deviceId,
+                            userId,
+                            trusted
+                        );
+                    }
                 }
             }
+        } catch (org.apache.kafka.common.errors.WakeupException e) {
+            // expected on shutdown
+        } finally {
+            consumer.close();
         }
     }
 }

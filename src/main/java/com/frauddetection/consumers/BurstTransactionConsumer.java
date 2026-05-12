@@ -45,38 +45,45 @@ public class BurstTransactionConsumer {
                 System.out.println(
                     "\nShutting down BurstTransactionConsumer..."
                 );
-                consumer.close();
+                consumer.wakeup();
             })
         );
 
-        while (true) {
-            ConsumerRecords<String, TransactionEvent> records = consumer.poll(
-                Duration.ofMillis(500)
-            );
-            long now = System.currentTimeMillis();
-
-            for (ConsumerRecord<String, TransactionEvent> record : records) {
-                TransactionEvent tx = record.value();
-                if (tx == null) continue;
-
-                String accountId = tx.getAccountId();
-
-                List<Long> times = timestamps.computeIfAbsent(accountId, k ->
-                    new ArrayList<>()
+        try {
+            while (true) {
+                ConsumerRecords<String, TransactionEvent> records = consumer.poll(
+                    Duration.ofMillis(500)
                 );
-                times.removeIf(t -> now - t > WINDOW_MS);
-                times.add(now);
+                long now = System.currentTimeMillis();
 
-                if (times.size() >= THRESHOLD) {
-                    System.out.printf(
-                        "[ALERT] BURST_TRANSACTIONS | tx=%s | account=%s | count=%d in 60s | user=%s%n",
-                        tx.getTransactionId(),
+                for (ConsumerRecord<String, TransactionEvent> record : records) {
+                    TransactionEvent tx = record.value();
+                    if (tx == null) continue;
+
+                    String accountId = tx.getAccountId();
+
+                    List<Long> times = timestamps.computeIfAbsent(
                         accountId,
-                        times.size(),
-                        tx.getUserId()
+                        k -> new ArrayList<>()
                     );
+                    times.removeIf(t -> now - t > WINDOW_MS);
+                    times.add(now);
+
+                    if (times.size() >= THRESHOLD) {
+                        System.out.printf(
+                            "[ALERT] BURST_TRANSACTIONS | tx=%s | account=%s | count=%d in 60s | user=%s%n",
+                            tx.getTransactionId(),
+                            accountId,
+                            times.size(),
+                            tx.getUserId()
+                        );
+                    }
                 }
             }
+        } catch (org.apache.kafka.common.errors.WakeupException e) {
+            // expected on shutdown
+        } finally {
+            consumer.close();
         }
     }
 }

@@ -23,12 +23,10 @@ public class PasswordChangeConsumer {
         new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
-        // Thread 1: consome auth.events
         Thread authThread = new Thread(() -> consumeAuthEvents());
         authThread.setDaemon(true);
         authThread.start();
 
-        // Thread 2: consome transactions.raw
         consumeTransactions();
     }
 
@@ -48,29 +46,35 @@ public class PasswordChangeConsumer {
 
         Runtime.getRuntime().addShutdownHook(
             new Thread(() -> {
-                consumer.close();
+                consumer.wakeup();
             })
         );
 
-        while (true) {
-            ConsumerRecords<String, AuthEvent> records = consumer.poll(
-                Duration.ofMillis(500)
-            );
-            long now = System.currentTimeMillis();
+        try {
+            while (true) {
+                ConsumerRecords<String, AuthEvent> records = consumer.poll(
+                    Duration.ofMillis(500)
+                );
+                long now = System.currentTimeMillis();
 
-            for (ConsumerRecord<String, AuthEvent> record : records) {
-                AuthEvent auth = record.value();
-                if (auth == null) continue;
+                for (ConsumerRecord<String, AuthEvent> record : records) {
+                    AuthEvent auth = record.value();
+                    if (auth == null) continue;
 
-                if ("password_change".equals(auth.getEventType())) {
-                    passwordChanges.put(auth.getUserId(), now);
-                    System.out.printf(
-                        "[INFO] Password change detected | user=%s | event=%s%n",
-                        auth.getUserId(),
-                        auth.getEventId()
-                    );
+                    if ("password_change".equals(auth.getEventType())) {
+                        passwordChanges.put(auth.getUserId(), now);
+                        System.out.printf(
+                            "[INFO] Password change detected | user=%s | event=%s%n",
+                            auth.getUserId(),
+                            auth.getEventId()
+                        );
+                    }
                 }
             }
+        } catch (org.apache.kafka.common.errors.WakeupException e) {
+            // expected on shutdown
+        } finally {
+            consumer.close();
         }
     }
 
@@ -97,37 +101,43 @@ public class PasswordChangeConsumer {
         Runtime.getRuntime().addShutdownHook(
             new Thread(() -> {
                 System.out.println("\nShutting down PasswordChangeConsumer...");
-                consumer.close();
+                consumer.wakeup();
             })
         );
 
-        while (true) {
-            ConsumerRecords<String, TransactionEvent> records = consumer.poll(
-                Duration.ofMillis(500)
-            );
-            long now = System.currentTimeMillis();
+        try {
+            while (true) {
+                ConsumerRecords<String, TransactionEvent> records = consumer.poll(
+                    Duration.ofMillis(500)
+                );
+                long now = System.currentTimeMillis();
 
-            for (ConsumerRecord<String, TransactionEvent> record : records) {
-                TransactionEvent tx = record.value();
-                if (tx == null) continue;
+                for (ConsumerRecord<String, TransactionEvent> record : records) {
+                    TransactionEvent tx = record.value();
+                    if (tx == null) continue;
 
-                String userId = tx.getUserId();
-                Long pwChangeTime = passwordChanges.get(userId);
+                    String userId = tx.getUserId();
+                    Long pwChangeTime = passwordChanges.get(userId);
 
-                if (
-                    pwChangeTime != null &&
-                    (now - pwChangeTime) <= WINDOW_MS &&
-                    tx.getAmount() > AMOUNT_THRESHOLD
-                ) {
-                    System.out.printf(
-                        "[ALERT] PASSWORD_CHANGE_THEN_HIGH_TX | tx=%s | user=%s | amount=R$%.2f | minSincePwChange=%.1f%n",
-                        tx.getTransactionId(),
-                        userId,
-                        tx.getAmount(),
-                        (now - pwChangeTime) / 60000.0
-                    );
+                    if (
+                        pwChangeTime != null &&
+                        (now - pwChangeTime) <= WINDOW_MS &&
+                        tx.getAmount() > AMOUNT_THRESHOLD
+                    ) {
+                        System.out.printf(
+                            "[ALERT] PASSWORD_CHANGE_THEN_HIGH_TX | tx=%s | user=%s | amount=R$%.2f | minSincePwChange=%.1f%n",
+                            tx.getTransactionId(),
+                            userId,
+                            tx.getAmount(),
+                            (now - pwChangeTime) / 60000.0
+                        );
+                    }
                 }
             }
+        } catch (org.apache.kafka.common.errors.WakeupException e) {
+            // expected on shutdown
+        } finally {
+            consumer.close();
         }
     }
 }
