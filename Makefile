@@ -22,15 +22,18 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "clean" "Remove local Maven build artifacts"
 	@printf "  \033[36m%-14s\033[0m %s\n" "clients" "Generate simulated client profiles"
 	@printf "  \033[36m%-14s\033[0m %s\n" "simulate" "Simulate legitimate transactions and auth events"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer1" "Run Consumer1"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer2" "Run Consumer2"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer3" "Run Consumer3"
 	@echo ""
 	@echo "Fraud Producers"
 	@printf "  \033[36m%-14s\033[0m %s\n" "high-amount" "Simulate high amount fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "burst" "Simulate burst transaction fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "unknown-device" "Simulate unknown device fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "password-change" "Simulate password change fraud"
+	@echo ""
+	@echo "Fraud Consumers"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-high-amount" "Detect high amount fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-burst" "Detect burst transaction fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-unknown-device" "Detect unknown device fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-password-change" "Detect password change fraud"
 	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
@@ -51,8 +54,8 @@ restart: ## Restart all services (recreates containers to pick up new env vars)
 	docker compose -f $(COMPOSE_FILE) up -d --force-recreate
 	@echo "✓ Services restarted"
 
-build: ## Build project JAR on host with Maven
-	@echo "→ Building project JAR on host..."
+build: ## Build project JAR with Maven
+	@echo "→ Building project JAR..."
 	mvn -q -DskipTests package
 	@echo "✓ Build complete"
 
@@ -62,12 +65,12 @@ clean: ## Clean Maven build artifacts
 	@echo "✓ Clean complete"
 
 clients: build ## Generate clients.json with simulated client metadata
-	@echo "→ Generating clients metadata on host..."
+	@echo "→ Generating clients metadata..."
 	java -cp $(JAVA_JAR) com.frauddetection.utils.ClientGenerator 100 $(CLIENTS_FILE)
 	@echo "✓ Clients generated -> $(CLIENTS_FILE)"
 
-simulate: build ## Run LegitimateEventProducer on host
-	@echo "→ Running LegitimateEventProducer on host..."
+simulate: build ## Run LegitimateEventProducer
+	@echo "→ Running LegitimateEventProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.LegitimateEventProducer
 
 listen: ## Listen to a Kafka topic (usage: TOPIC=name make listen)
@@ -91,16 +94,20 @@ password-change: build ## Simulate password change fraud
 	@echo "→ Running PasswordChangeFraudProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.PasswordChangeFraudProducer
 
-consumer1: build ## Run Consumer1 on host
-	@echo "→ Running Consumer1 on host..."
-	java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer1
+detect-high-amount: build ## Detect high amount fraud
+	@echo "→ Running HighAmountConsumer..."
+	java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer
 
-consumer2: build ## Run Consumer2 on host
-	@echo "→ Running Consumer2 on host..."
-	java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer2
+detect-burst: build ## Detect burst transaction fraud
+	@echo "→ Running BurstTransactionConsumer..."
+	java -cp $(JAVA_JAR) com.frauddetection.consumers.BurstTransactionConsumer
 
-consumer3: build ## Run Consumer3 on host
-	@echo "→ Running Consumer3 on host..."
-	java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer3
+detect-unknown-device: build ## Detect unknown device fraud
+	@echo "→ Running UnknownDeviceConsumer..."
+	java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer
 
-.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change consumer1 consumer2 consumer3
+detect-password-change: build ## Detect password change fraud
+	@echo "→ Running PasswordChangeConsumer..."
+	java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer
+
+.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change detect-high-amount detect-burst detect-unknown-device detect-password-change

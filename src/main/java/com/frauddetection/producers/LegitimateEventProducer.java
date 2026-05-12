@@ -157,7 +157,7 @@ public class LegitimateEventProducer {
         String type = TRANSACTION_TYPES.get(
             RANDOM.nextInt(TRANSACTION_TYPES.size())
         );
-        double amount = 10.0 + RANDOM.nextDouble() * 490.0; // R$ 10 – R$ 500
+        double amount = 150.0 + RANDOM.nextDouble() * 50.0; // R$ 150 – R$ 200
         amount = Math.round(amount * 100.0) / 100.0;
 
         String destinationAccount = pickRandomDifferentAccount(
