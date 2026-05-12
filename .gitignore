@@ -1,3 +1,16 @@
 .env
 venv
 .git/
+
+# Java / Maven
+target/
+*.jar
+*.war
+*.ear
+*.class
+.mvn/
+mvnw
+mvnw.cmd
+*.iml
+.idea/
+*.log
