@@ -2,7 +2,8 @@
 # Utility commands to manage the fraud detection project with Kafka
 
 COMPOSE_FILE := compose.yaml
-JAR_FILE := target/kafka-finance-example-1.0-SNAPSHOT.jar
+JAVA_CONTAINER := java-runner
+JAVA_JAR := /app/kafka-finance-example.jar
 CLIENTS_FILE := clients.json
 
 .DEFAULT_GOAL := help
@@ -18,14 +19,14 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "restart" "Restart all services (recreates containers to pick up new env vars)"
 	@echo ""
 	@echo "Java"
-	@printf "  \033[36m%-14s\033[0m %s\n" "build" "Compile the Java project with Maven"
-	@printf "  \033[36m%-14s\033[0m %s\n" "clean" "Clean Maven build artifacts"
-	@printf "  \033[36m%-14s\033[0m %s\n" "clients" "Generate clients.json with simulated client metadata"
-	@printf "  \033[36m%-14s\033[0m %s\n" "producer1" "Run Producer1"
-	@printf "  \033[36m%-14s\033[0m %s\n" "producer2" "Run Producer2"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer1" "Run Consumer1"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer2" "Run Consumer2"
-	@printf "  \033[36m%-14s\033[0m %s\n" "consumer3" "Run Consumer3"
+	@printf "  \033[36m%-14s\033[0m %s\n" "build" "Build java-runner image (compiles Java classes)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "clean" "Remove local Maven build artifacts"
+	@printf "  \033[36m%-14s\033[0m %s\n" "clients" "Generate clients.json via docker exec"
+	@printf "  \033[36m%-14s\033[0m %s\n" "producer1" "Run Producer1 via docker exec"
+	@printf "  \033[36m%-14s\033[0m %s\n" "consumer1" "Run Consumer1 via docker exec"
+	@printf "  \033[36m%-14s\033[0m %s\n" "consumer2" "Run Consumer2 via docker exec"
+	@printf "  \033[36m%-14s\033[0m %s\n" "consumer3" "Run Consumer3 via docker exec"
+	@printf "  \033[36m%-14s\033[0m %s\n" "run" "Run CLASS=<java.class> with optional ARGS"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make up"
@@ -34,9 +35,10 @@ help: ## Show this help message
 	@echo "  make build"
 	@echo "  make clients"
 	@echo "  make producer1"
+	@echo "  make run CLASS=com.frauddetection.consumers.Consumer1"
 	@echo ""
 
-up: ## Start all services with Docker Compose (builds image if needed)
+up: ## Start all services with Docker Compose (builds images if needed)
 	@echo "→ Starting services with Docker Compose..."
 	docker compose -f $(COMPOSE_FILE) up -d --build
 	@echo "✓ Services started"
@@ -51,9 +53,9 @@ restart: ## Restart all services (recreates containers to pick up new env vars)
 	docker compose -f $(COMPOSE_FILE) up -d --force-recreate
 	@echo "✓ Services restarted"
 
-build: ## Compile the Java project with Maven
-	@echo "→ Building Java project..."
-	@mvn package -DskipTests -q
+build: ## Build java-runner image (compiles Java classes)
+	@echo "→ Building java-runner image..."
+	docker compose -f $(COMPOSE_FILE) build java-runner
 	@echo "✓ Build complete"
 
 clean: ## Clean Maven build artifacts
@@ -63,27 +65,28 @@ clean: ## Clean Maven build artifacts
 
 clients: build ## Generate clients.json with simulated client metadata
 	@echo "→ Generating clients metadata..."
-	@java -cp $(JAR_FILE) com.frauddetection.utils.ClientGenerator 100 $(CLIENTS_FILE)
+	docker exec $(JAVA_CONTAINER) java -cp $(JAVA_JAR) com.frauddetection.utils.ClientGenerator 100 /workspace/$(CLIENTS_FILE)
 	@echo "✓ Clients generated -> $(CLIENTS_FILE)"
 
-producer1: build ## Run Producer1
-	@echo "→ Running Producer1..."
-	@java -cp $(JAR_FILE) com.frauddetection.producers.Producer1
+producer1: ## Run Producer1 via docker exec
+	@echo "→ Running Producer1 via docker exec..."
+	docker exec $(JAVA_CONTAINER) java -cp $(JAVA_JAR) com.frauddetection.producers.Producer1
 
-producer2: build ## Run Producer2
-	@echo "→ Running Producer2..."
-	@java -cp $(JAR_FILE) com.frauddetection.producers.Producer2
+consumer1: ## Run Consumer1 via docker exec
+	@echo "→ Running Consumer1 via docker exec..."
+	docker exec $(JAVA_CONTAINER) java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer1
 
-consumer1: build ## Run Consumer1
-	@echo "→ Running Consumer1..."
-	@java -cp $(JAR_FILE) com.frauddetection.consumers.Consumer1
+consumer2: ## Run Consumer2 via docker exec
+	@echo "→ Running Consumer2 via docker exec..."
+	docker exec $(JAVA_CONTAINER) java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer2
 
-consumer2: build ## Run Consumer2
-	@echo "→ Running Consumer2..."
-	@java -cp $(JAR_FILE) com.frauddetection.consumers.Consumer2
+consumer3: ## Run Consumer3 via docker exec
+	@echo "→ Running Consumer3 via docker exec..."
+	docker exec $(JAVA_CONTAINER) java -cp $(JAVA_JAR) com.frauddetection.consumers.Consumer3
 
-consumer3: build ## Run Consumer3
-	@echo "→ Running Consumer3..."
-	@java -cp $(JAR_FILE) com.frauddetection.consumers.Consumer3
+run: ## Run CLASS=<java.class> with optional ARGS via docker exec
+	@if [ -z "$(CLASS)" ]; then echo "Usage: make run CLASS=com.example.Main [ARGS='arg1 arg2']"; exit 1; fi
+	@echo "→ Running $(CLASS) via docker exec..."
+	docker exec $(JAVA_CONTAINER) sh -c "java -cp $(JAVA_JAR) $(CLASS) $(ARGS)"
 
-.PHONY: help up down restart build clean clients producer1 producer2 consumer1 consumer2 consumer3
+.PHONY: help up down restart build clean clients producer1 consumer1 consumer2 consumer3 run
