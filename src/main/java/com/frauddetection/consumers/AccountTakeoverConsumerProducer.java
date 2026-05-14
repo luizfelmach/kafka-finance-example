@@ -1,35 +1,36 @@
 package com.frauddetection.consumers;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.frauddetection.config.KafkaConfig;
 import com.frauddetection.model.AuthEvent;
 import com.frauddetection.model.FraudAlert;
 import com.frauddetection.model.TransactionEvent;
-import com.frauddetection.serialization.AuthEventDeserializer;
-import com.frauddetection.serialization.TransactionEventDeserializer;
 import com.frauddetection.utils.ClientLoader;
 import com.frauddetection.utils.ClientProfile;
 import java.time.Duration;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 
 public class AccountTakeoverConsumerProducer {
 
-    private static final long WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+    private static final long WINDOW_MS = 10 * 60 * 1000; // 10 minutos
     private static final double HIGH_VALUE_THRESHOLD = 1000.0;
 
     private static final Map<String, UserState> userStates = new ConcurrentHashMap<>();
-    private static Map<String, List<String>> trustedDevicesMap = new HashMap<>();
-
-    private static KafkaProducer<String, FraudAlert> fraudProducer;
+    private static final Map<String, List<String>> trustedDevicesMap = new HashMap<>();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static void main(String[] args) {
         List<ClientProfile> clients = ClientLoader.loadClients("clients.json");
@@ -37,109 +38,93 @@ public class AccountTakeoverConsumerProducer {
             trustedDevicesMap.put(c.userId(), c.trustedDevices());
         }
 
-        fraudProducer = new KafkaProducer<>(KafkaConfig.producerProps());
+        Properties consumerProps = KafkaConfig.consumerProps("account-takeover-group");
+        consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
 
-        Thread authThread = new Thread(AccountTakeoverConsumerProducer::consumeAuthEvents);
-        authThread.setDaemon(true);
-        authThread.start();
+        KafkaConsumer<String, byte[]> consumer = new KafkaConsumer<>(consumerProps);
+        KafkaProducer<String, FraudAlert> fraudProducer = new KafkaProducer<>(KafkaConfig.producerProps());
 
-        consumeTransactions();
-    }
+        consumer.subscribe(Arrays.asList(KafkaConfig.TOPIC_AUTH_EVENTS, KafkaConfig.TOPIC_TRANSACTIONS_RAW));
 
-    private static void consumeAuthEvents() {
-        Properties props = KafkaConfig.consumerProps("account-takeover-auth-consumer");
-        props.put(
-                org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                AuthEventDeserializer.class.getName());
-
-        KafkaConsumer<String, AuthEvent> consumer = new KafkaConsumer<>(props);
-        consumer.subscribe(Collections.singletonList(KafkaConfig.TOPIC_AUTH_EVENTS));
-
-        try {
-            while (true) {
-                ConsumerRecords<String, AuthEvent> records = consumer.poll(Duration.ofMillis(500));
-                long now = System.currentTimeMillis();
-
-                for (ConsumerRecord<String, AuthEvent> record : records) {
-                    AuthEvent auth = record.value();
-                    if (auth == null)
-                        continue;
-
-                    String userId = auth.getUserId();
-                    List<String> trusted = trustedDevicesMap.get(userId);
-                    boolean isUnknownDevice = trusted == null || !trusted.contains(auth.getDeviceId());
-
-                    if ("login".equals(auth.getEventType()) && isUnknownDevice) {
-                        UserState state = userStates.computeIfAbsent(userId, k -> new UserState());
-                        state.unknownLoginTime = now;
-                    } else if ("password_change".equals(auth.getEventType())) {
-                        UserState state = userStates.get(userId);
-                        if (state != null && (now - state.unknownLoginTime) <= WINDOW_MS) {
-                            state.passwordChangeTime = now;
-                            System.out.printf("[INFO] Password change after unknown login | user=%s%n", userId);
-                        }
-                    }
-                }
-            }
-        } catch (org.apache.kafka.common.errors.WakeupException e) {
-            // expected
-        } finally {
-            consumer.close();
-        }
-    }
-
-    private static void consumeTransactions() {
-        Properties props = KafkaConfig.consumerProps("account-takeover-tx-consumer");
-        props.put(
-                org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                TransactionEventDeserializer.class.getName());
-
-        KafkaConsumer<String, TransactionEvent> consumer = new KafkaConsumer<>(props);
-        consumer.subscribe(Collections.singletonList(KafkaConfig.TOPIC_TRANSACTIONS_RAW));
-
-        System.out.println("AccountTakeoverConsumerProducer started. Monitoring sequence...");
+        System.out.println("AccountTakeoverConsumerProducer started. Monitoring transactions...");
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("\nShutting down AccountTakeoverConsumerProducer...");
+            System.out.println("\nShutting down processor...");
             consumer.wakeup();
             fraudProducer.close();
         }));
 
         try {
             while (true) {
-                ConsumerRecords<String, TransactionEvent> records = consumer.poll(Duration.ofMillis(500));
-                long now = System.currentTimeMillis();
+                ConsumerRecords<String, byte[]> records = consumer.poll(Duration.ofMillis(500));
 
-                for (ConsumerRecord<String, TransactionEvent> record : records) {
-                    TransactionEvent tx = record.value();
-                    if (tx == null)
-                        continue;
-
-                    String userId = tx.getUserId();
-                    UserState state = userStates.get(userId);
-
-                    if (state != null && state.passwordChangeTime > 0 &&
-                            (now - state.passwordChangeTime) <= WINDOW_MS &&
-                            tx.getAmount() >= HIGH_VALUE_THRESHOLD) {
-
-                        String description = String.format(
-                                "Account takeover detected: Unknown device login followed by password change and high value transaction (R$%.2f)",
-                                tx.getAmount());
-                        FraudAlert alert = new FraudAlert("ACCOUNT_TAKEOVER", userId, description, now);
-
-                        fraudProducer.send(new ProducerRecord<>(KafkaConfig.TOPIC_FRAUD_EVENTS, userId, alert));
-
-                        System.out.printf("[ALERT] ACCOUNT_TAKEOVER | user=%s | tx=%s | amount=R$%.2f%n",
-                                userId, tx.getTransactionId(), tx.getAmount());
-
-                        // Reset state after alert to avoid duplicate alerts for the same sequence
-                        userStates.remove(userId);
+                for (ConsumerRecord<String, byte[]> record : records) {
+                    try {
+                        if (record.topic().equals(KafkaConfig.TOPIC_AUTH_EVENTS)) {
+                            AuthEvent auth = objectMapper.readValue(record.value(), AuthEvent.class);
+                            handleAuthEvent(auth);
+                        } 
+                        else if (record.topic().equals(KafkaConfig.TOPIC_TRANSACTIONS_RAW)) {
+                            TransactionEvent tx = objectMapper.readValue(record.value(), TransactionEvent.class);
+                            handleTransactionEvent(tx, fraudProducer);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error processing record from topic " + record.topic() + ": " + e.getMessage());
                     }
                 }
             }
         } catch (org.apache.kafka.common.errors.WakeupException e) {
         } finally {
             consumer.close();
+        }
+    }
+
+    private static void handleAuthEvent(AuthEvent auth) {
+        if (auth == null) return;
+
+        String userId = auth.getUserId();
+        long now = System.currentTimeMillis();
+        List<String> trusted = trustedDevicesMap.get(userId);
+        boolean isUnknownDevice = trusted == null || !trusted.contains(auth.getDeviceId());
+
+        if ("login".equals(auth.getEventType()) && isUnknownDevice) {
+            UserState state = userStates.computeIfAbsent(userId, k -> new UserState());
+            state.unknownLoginTime = now;
+        } 
+        else if ("password_change".equals(auth.getEventType())) {
+            UserState state = userStates.get(userId);
+            if (state != null && state.unknownLoginTime > 0 && (now - state.unknownLoginTime) <= WINDOW_MS) {
+                state.passwordChangeTime = now;
+                System.out.printf("[INFO] Password change after suspect login | user=%s%n", userId);
+            }
+        }
+    }
+
+    private static void handleTransactionEvent(TransactionEvent tx, KafkaProducer<String, FraudAlert> producer) {
+        if (tx == null) return;
+
+        String userId = tx.getUserId();
+        UserState state = userStates.get(userId);
+        long now = System.currentTimeMillis();
+
+        if (state != null && state.passwordChangeTime > 0) {
+            boolean withinWindow = (now - state.passwordChangeTime) <= WINDOW_MS;
+            boolean isHighValue = tx.getAmount() >= HIGH_VALUE_THRESHOLD;
+
+            if (withinWindow && isHighValue) {
+                String desc = String.format(
+                    "Account takeover: Suspect login -> Password change -> High value transaction (R$%.2f)", 
+                    tx.getAmount()
+                );
+                
+                FraudAlert alert = new FraudAlert("ACCOUNT_TAKEOVER", userId, desc, now);
+                producer.send(new ProducerRecord<>(KafkaConfig.TOPIC_FRAUD_EVENTS, userId, alert));
+
+                System.out.printf("[ALERT] ACCOUNT_TAKEOVER | user=%s | amount=R$%.2f%n", userId, tx.getAmount());
+
+                userStates.remove(userId);
+            }
         }
     }
 

@@ -39,6 +39,7 @@ help: ## Show this help message
 	@echo ""
 	@echo "Tmux"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 5 tmux panes with all fraud detectors"
+	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-kill" "Kill the tmux session"
 	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
