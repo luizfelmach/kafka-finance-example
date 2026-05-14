@@ -1,526 +1,387 @@
-# Projeto Kafka para Detecção de Transações Fraudulentas
+# Kafka Finance Example — Sistema de Detecção de Fraudes
 
-## Visão geral
+Sistema de detecção de fraudes financeiras em tempo real utilizando **Apache Kafka** como plataforma de streaming de eventos. O projeto simula transações bancárias, eventos de autenticação e detecta padrões suspeitos através de consumidores especializados.
 
-Este documento descreve uma proposta completa de projeto para a disciplina de Sistemas Orientados a Eventos, usando Apache Kafka como infraestrutura principal para monitorar, em tempo real, transações financeiras potencialmente fraudulentas [1].
+---
 
-A proposta segue diretamente o enunciado da atividade, que exige uma arquitetura orientada a eventos com produtores, consumidores e brokers Kafka, além da detecção de situações de interesse a partir de eventos primitivos e da geração de pelo menos um evento derivado ou composto para apoiar ações posteriores [1].
+## Sumário
 
-## Objetivo do projeto
+- [Visão Geral](#visão-geral)
+- [Arquitetura](#arquitetura)
+- [Tecnologias](#tecnologias)
+- [Pré-requisitos](#pré-requisitos)
+- [Estrutura do Projeto](#estrutura-do-projeto)
+- [Configuração e Execução](#configuração-e-execução)
+- [Comandos Make Disponíveis](#comandos-make-disponíveis)
+- [Tipos de Fraude Detectados](#tipos-de-fraude-detectados)
+- [Tópicos Kafka](#tópicos-kafka)
+- [Modelos de Dados](#modelos-de-dados)
+- [Consumidores e Detectores](#consumidores-e-detectores)
+- [Produtores de Eventos](#produtores-de-eventos)
+- [Licença](#licença)
 
-O objetivo é simular um sistema financeiro digital capaz de produzir continuamente eventos de transações e eventos de contexto do usuário, processá-los em tempo real e identificar comportamentos suspeitos que indiquem fraude [1].
+---
 
-Quando uma situação de interesse for detectada, o sistema deve reagir por meio de ações como geração de alertas, bloqueio temporário de operações, solicitação de autenticação adicional ou publicação de novos eventos para outros componentes do ecossistema consumirem [1].
+## Visão Geral
 
-## Relação com o enunciado
+Este projeto demonstra um pipeline completo de detecção de fraudes financeiras:
 
-O projeto atende ao enunciado em quatro pontos centrais:
+1. **Geração de clientes simulados** — perfis com contas, dispositivos confiáveis e IPs.
+2. **Produção de eventos legítimos** — transações e autenticações normais.
+3. **Simulação de fraudes** — produtores especializados injetam comportamentos maliciosos.
+4. **Detecção em tempo real** — consumidores Kafka analisam padrões e geram alertas.
 
-- Implementa um sistema de monitoramento orientado a eventos com Kafka como middleware de comunicação [1].
-- Monitora continuamente eventos produzidos em tempo real por produtores e consumidos por serviços especializados [1].
-- Define quatro situações de interesse detectadas a partir de eventos primitivos [1].
-- Inclui um caso mais complexo em que um consumidor infere conhecimento e republica eventos derivados no Kafka [1].
+---
 
-Além disso, como o enunciado permite o uso de dados simulados em tempo real quando não houver API pública adequada para o domínio escolhido, a simulação de um ambiente financeiro é plenamente válida para o trabalho [1].
+## Arquitetura
 
-## Domínio escolhido
-
-O domínio proposto é o de um **banco digital com operações financeiras em tempo real**, incluindo principalmente transações PIX, transferências internas, cadastro de favorecidos, tentativas de login, troca de dispositivo, alteração de senha e atualização de limites.
-
-Esse domínio é especialmente adequado porque facilita a criação de eventos diversos, permite demonstrar regras simples e compostas de detecção de fraude e produz uma narrativa de apresentação intuitiva, já que fraude bancária é um problema conhecido e fácil de contextualizar.
-
-## Justificativa da escolha
-
-Fraude em transações financeiras é um caso clássico de monitoramento em tempo real. O sistema precisa reagir rapidamente a comportamentos suspeitos, muitas vezes antes da conclusão da operação.
-
-Com Kafka, é possível desacoplar geração, transporte, processamento e ação sobre os eventos, tornando a arquitetura aderente ao modelo orientado a eventos pedido na atividade [1].
-
-## Arquitetura proposta
-
-A arquitetura pode ser organizada em produtores, tópicos Kafka, consumidores e componentes de visualização.
-
-### Componentes principais
-
-- **Produtor de transações**: gera eventos financeiros continuamente.
-- **Produtor de autenticação e contexto**: gera eventos como login, falha de autenticação, troca de dispositivo e alteração de senha.
-- **Broker Kafka**: recebe e distribui eventos para os consumidores.
-- **Consumidor de regras simples**: detecta situações imediatas a partir de eventos primitivos.
-- **Consumidor agregador de risco**: correlaciona múltiplos eventos e produz eventos derivados.
-- **Consumidor de decisão/ação**: consome eventos derivados e executa ações como alerta ou bloqueio.
-- **Dashboard**: exibe métricas, alertas e estatísticas em tempo real, alinhando-se à funcionalidade desejável de visualização citada no enunciado [1].
-
-### Fluxo de alto nível
-
-1. O simulador produz transações e eventos contextuais.
-2. Esses eventos são publicados em tópicos Kafka.
-3. Consumidores processam os eventos em tempo real.
-4. Regras simples geram alertas imediatos.
-5. Um consumidor mais avançado combina múltiplos sinais e produz um evento derivado de risco.
-6. Outro consumidor toma a decisão final e publica o resultado.
-7. O dashboard mostra os resultados em tempo real.
-
-Esse fluxo está alinhado ao funcionamento geral de um sistema de monitoramento orientado a eventos descrito no enunciado, no qual recursos produzem eventos, consumidores monitoram continuamente esses eventos e ações são executadas quando situações de interesse são detectadas [1].
-
-## Tópicos Kafka sugeridos
-
-A seguir está uma sugestão de tópicos para organizar o projeto:
-
-| Tópico | Finalidade |
-|---|---|
-| `transactions.raw` | Transações financeiras brutas geradas pelo simulador |
-| `auth.events` | Eventos de autenticação, login, falhas e alterações de contexto |
-| `customer.profile` | Informações de perfil e comportamento esperado do cliente |
-| `fraud.alerts` | Alertas gerados por regras simples ou compostas |
-| `risk.scores` | Eventos derivados contendo score de risco |
-| `transactions.blocked` | Transações bloqueadas por alto risco |
-| `transactions.approved` | Transações aprovadas automaticamente |
-| `transactions.review` | Transações enviadas para análise manual |
-
-Essa separação ajuda a demonstrar claramente o papel de cada consumidor e o encadeamento de eventos simples e derivados.
-
-## Modelos de eventos
-
-A seguir estão exemplos de mensagens publicadas em cada tópico.
-
-### `transactions.raw`
-
-Evento primitivo de transação financeira:
-
-```json
-{
-  "transaction_id": "tx-123",
-  "account_id": "acc-88",
-  "user_id": "u-7",
-  "type": "PIX",
-  "amount": 4800.50,
-  "timestamp": "2026-04-24T12:00:00Z",
-  "origin_country": "BR",
-  "device_id": "dev-21",
-  "ip_address": "177.10.2.8",
-  "merchant_category": "electronics",
-  "destination_account": "acc-999",
-  "status": "REQUESTED"
-}
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        PRODUTORES                                │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │ LegitimateEvent │  │ FraudProducers  │  │ FraudProducers  │ │
+│  │   Producer      │  │  (6 tipos)      │  │  (6 tipos)      │ │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘ │
+└───────────┼────────────────────┼────────────────────┼──────────┘
+            │                    │                    │
+            ▼                    ▼                    ▼
+   ┌────────────────┐   ┌────────────────┐   ┌────────────────┐
+   │ transactions   │   │   auth.events  │   │  fraud.events  │
+   │    .raw        │   │                │   │                │
+   │  (3 partições) │   │  (3 partições) │   │  (3 partições) │
+   │    RF = 3      │   │    RF = 3      │   │    RF = 3      │
+   └───────┬────────┘   └───────┬────────┘   └────────────────┘
+           │                    │
+           ▼                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      CONSUMIDORES / DETECTORES                   │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌────────────┐ │
+│  │ HighAmount  │ │   Burst     │ │   Unknown   │ │ Password   │ │
+│  │  Consumer   │ │ Transaction │ │   Device    │ │  Change    │ │
+│  │             │ │  Consumer   │ │  Consumer   │ │  Consumer  │ │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └────────────┘ │
+│  ┌─────────────────┐ ┌─────────────────┐                         │
+│  │ AccountTakeover │ │ EmptyingAccount │                         │
+│  │ConsumerProducer │ │ConsumerProducer │                         │
+│  └─────────────────┘ └─────────────────┘                         │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### `auth.events`
+---
 
-Eventos de autenticação e alterações de contexto do usuário:
+## Tecnologias
 
-```json
-{
-  "event_id": "auth-456",
-  "user_id": "u-7",
-  "event_type": "password_change",
-  "timestamp": "2026-04-24T11:58:00Z",
-  "device_id": "dev-21",
-  "ip_address": "177.10.2.8"
-}
+| Tecnologia | Versão | Descrição |
+|------------|--------|-----------|
+| Java | 17 | Linguagem principal |
+| Apache Kafka | 3.7.1 / 3.8.0 | Plataforma de streaming |
+| Maven | — | Build e dependências |
+| Docker / Docker Compose | — | Cluster Kafka local |
+| Jackson | 2.17.0 | Serialização JSON |
+| SLF4J | 2.0.13 | Logging |
+| Tmux | — | Orquestração de terminais |
+
+---
+
+## Pré-requisitos
+
+- **Java 17** ou superior
+- **Maven 3.8+**
+- **Docker** e **Docker Compose**
+- **Tmux** (opcional, para execução paralela dos detectores)
+
+---
+
+## Estrutura do Projeto
+
+```
+.
+├── compose.yaml                    # Docker Compose — cluster Kafka (3 brokers)
+├── Makefile                        # Comandos utilitários
+├── pom.xml                         # Configuração Maven
+├── clients.json                    # Perfis de clientes gerados
+├── kafka/
+│   ├── broker1.properties          # Config broker 1
+│   ├── broker2.properties          # Config broker 2
+│   └── broker3.properties          # Config broker 3
+└── src/main/java/com/frauddetection/
+    ├── config/
+    │   └── KafkaConfig.java        # Configuração de brokers e tópicos
+    ├── model/
+    │   ├── TransactionEvent.java   # Evento de transação
+    │   ├── AuthEvent.java          # Evento de autenticação
+    │   └── FraudAlert.java         # Alerta de fraude
+    ├── serialization/
+    │   ├── JsonSerializer.java
+    │   ├── TransactionEventDeserializer.java
+    │   ├── AuthEventDeserializer.java
+    │   └── FraudAlertDeserializer.java
+    ├── producers/
+    │   ├── LegitimateEventProducer.java
+    │   ├── HighAmountFraudProducer.java
+    │   ├── BurstTransactionFraudProducer.java
+    │   ├── UnknownDeviceFraudProducer.java
+    │   ├── PasswordChangeFraudProducer.java
+    │   ├── AccountTakeoverFraudProducer.java
+    │   └── EmptyingAccountFraudProducer.java
+    ├── consumers/
+    │   ├── HighAmountConsumer.java
+    │   ├── BurstTransactionConsumer.java
+    │   ├── UnknownDeviceConsumer.java
+    │   ├── PasswordChangeConsumer.java
+    │   ├── AccountTakeoverConsumerProducer.java
+    │   └── EmptyingAccountConsumerProducer.java
+    └── utils/
+        ├── ClientGenerator.java
+        ├── ClientLoader.java
+        └── ClientProfile.java
 ```
 
-Outros `event_type` possíveis: `login`, `failed_auth`, `device_change`.
+---
 
-### `customer.profile`
+## Configuração e Execução
 
-Informações de perfil e comportamento esperado do cliente:
+### 1. Iniciar o cluster Kafka
 
-```json
-{
-  "user_id": "u-7",
-  "account_id": "acc-88",
-  "average_transaction_amount": 250.00,
-  "typical_merchant_categories": ["grocery", "transport"],
-  "trusted_devices": ["dev-21", "dev-05"],
-  "typical_hours": "08:00-22:00",
-  "updated_at": "2026-04-24T10:00:00Z"
-}
+```bash
+make up
 ```
 
-### `fraud.alerts`
+Sobe 3 brokers Kafka em containers Docker com configuração KRaft (sem ZooKeeper).
 
-Alertas gerados por regras simples ou compostas:
+- **Broker 1** → `localhost:19092`
+- **Broker 2** → `localhost:29092`
+- **Broker 3** → `localhost:39092`
 
-```json
-{
-  "alert_id": "alert-789",
-  "user_id": "u-7",
-  "transaction_id": "tx-123",
-  "alert_type": "PASSWORD_CHANGE_THEN_HIGH_TRANSACTION",
-  "severity": "HIGH",
-  "reason": "Senha alterada em 2026-04-24T11:58:00Z, transacao de R$ 4800.50 em 2026-04-24T12:00:00Z (2 min depois)",
-  "timestamp": "2026-04-24T12:00:00Z"
-}
+### 2. Criar os tópicos
+
+```bash
+make topics
 ```
 
-### `risk.scores`
+Cria os 3 tópicos com 3 partições e fator de replicação 3:
+- `transactions.raw`
+- `auth.events`
+- `fraud.events`
 
-Evento derivado contendo score de risco calculado:
+### 3. Gerar clientes simulados
 
-```json
-{
-  "transaction_id": "tx-123",
-  "account_id": "acc-88",
-  "user_id": "u-7",
-  "risk_score": 85,
-  "reasons": [
-    "high_amount",
-    "new_device",
-    "password_change_recent"
-  ],
-  "decision": "REVIEW",
-  "timestamp": "2026-04-24T12:00:05Z"
-}
+```bash
+make clients
 ```
 
-### `transactions.blocked`
+Gera o arquivo `clients.json` com 100 perfis de clientes contendo:
+- `user_id`
+- `accounts` (1–2 contas)
+- `trusted_devices` (1–2 dispositivos)
+- `home_ip`
 
-Transação bloqueada por alto risco:
+### 4. Compilar o projeto
 
-```json
-{
-  "transaction_id": "tx-123",
-  "account_id": "acc-88",
-  "user_id": "u-7",
-  "type": "PIX",
-  "amount": 4800.50,
-  "timestamp": "2026-04-24T12:00:00Z",
-  "block_reason": "risk_score_above_threshold",
-  "risk_score": 85,
-  "blocked_at": "2026-04-24T12:00:05Z"
-}
+```bash
+make build
 ```
 
-### `transactions.approved`
+Gera o JAR sombreado em `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
 
-Transação aprovada automaticamente:
+---
+
+## Comandos Make Disponíveis
+
+### Infraestrutura
+
+| Comando | Descrição |
+|---------|-----------|
+| `make up` | Inicia o cluster Kafka via Docker Compose |
+| `make down` | Para e remove os containers |
+| `make restart` | Reinicia os serviços recriando os containers |
+
+### Build
+
+| Comando | Descrição |
+|---------|-----------|
+| `make build` | Compila o projeto com Maven |
+| `make clean` | Remove artefatos de build |
+
+### Dados
+
+| Comando | Descrição |
+|---------|-----------|
+| `make clients` | Gera `clients.json` com 100 clientes |
+| `make simulate` | Executa o produtor de eventos legítimos |
+
+### Produtores de Fraude
+
+| Comando | Tipo de Fraude |
+|---------|----------------|
+| `make high-amount` | Transação com valor anormalmente alto |
+| `make burst` | Rajada de transações em curto período |
+| `make unknown-device` | Transação a partir de dispositivo desconhecido |
+| `make password-change` | Alteração de senha suspeita |
+| `make account-takeover` | Sequência: login suspeito → troca de senha → transação de alto valor |
+| `make emptying-account` | Tentativa de esvaziar a conta |
+
+### Consumidores / Detectores
+
+| Comando | Detector |
+|---------|----------|
+| `make detect-high-amount` | Detecção de valor alto |
+| `make detect-burst` | Detecção de rajada |
+| `make detect-unknown-device` | Detecção de dispositivo desconhecido |
+| `make detect-password-change` | Detecção de troca de senha |
+| `make detect-account-takeover` | Detecção de takeover de conta |
+| `make detect-emptying-account` | Detecção de esvaziamento de conta |
+
+### Tmux (execução paralela)
+
+| Comando | Descrição |
+|---------|-----------|
+| `make tmux` | Abre 6 painéis com todos os detectores simultaneamente |
+| `make tmux-kill` | Encerra a sessão tmux |
+
+### Kafka Utils
+
+| Comando | Descrição |
+|---------|-----------|
+| `make topics` | Cria os tópicos necessários |
+| `make topics-view` | Lista todos os tópicos |
+| `make topics-describe` | Exibe detalhes dos tópicos da aplicação |
+| `make listen TOPIC=<nome>` | Escuta um tópico no console |
+
+---
+
+## Tipos de Fraude Detectados
+
+| Tipo | Descrição | Lógica de Detecção |
+|------|-----------|--------------------|
+| **HIGH_AMOUNT** | Transação com valor muito acima da média histórica | Se primeira transação > R$ 8.000 OU valor > 3× média móvel (janela de 5 min) |
+| **BURST_TRANSACTIONS** | Muitas transações em curto intervalo | ≥ 5 transações em 60 segundos por conta |
+| **UNKNOWN_DEVICE** | Dispositivo não cadastrado realiza transação | Verifica `deviceId` contra `trusted_devices` do perfil |
+| **PASSWORD_CHANGE** | Alteração de senha seguida de transação suspeita | Troca de senha após login de dispositivo desconhecido |
+| **ACCOUNT_TAKEOVER** | Sequência completa de invasão | Login desconhecido → troca de senha → transação de alto valor (dentro de 10 min) |
+| **EMPTYING_ACCOUNT** | Tentativa de esvaziar saldo da conta | Múltiplas transações de alto valor em sequência |
+
+---
+
+## Tópicos Kafka
+
+| Tópico | Partições | Replicação | Conteúdo |
+|--------|-----------|------------|----------|
+| `transactions.raw` | 3 | 3 | Eventos de transação (PIX, CRED, DEB) |
+| `auth.events` | 3 | 3 | Eventos de autenticação (login, password_change) |
+| `fraud.events` | 3 | 3 | Alertas de fraude gerados pelos consumidores |
+
+---
+
+## Modelos de Dados
+
+### TransactionEvent
 
 ```json
 {
-  "transaction_id": "tx-124",
-  "account_id": "acc-88",
-  "user_id": "u-7",
+  "transactionId": "tx-a1b2c3d4",
+  "accountId": "acc-u-000-0",
+  "userId": "u-000",
   "type": "PIX",
   "amount": 150.00,
-  "timestamp": "2026-04-24T12:05:00Z",
-  "risk_score": 15,
-  "approved_at": "2026-04-24T12:05:01Z"
+  "deviceId": "dev-u-000-0",
+  "ipAddress": "177.10.174.12",
+  "destinationAccount": "acc-u-001-0"
 }
 ```
 
-### `transactions.review`
-
-Transação enviada para análise manual:
+### AuthEvent
 
 ```json
 {
-  "transaction_id": "tx-123",
-  "account_id": "acc-88",
-  "user_id": "u-7",
-  "type": "PIX",
-  "amount": 4800.50,
-  "timestamp": "2026-04-24T12:00:00Z",
-  "risk_score": 85,
-  "review_reason": "multiple_risk_signals",
-  "sent_to_review_at": "2026-04-24T12:00:05Z"
+  "eventId": "auth-e1f2g3h4",
+  "userId": "u-000",
+  "eventType": "login",
+  "deviceId": "dev-u-000-0",
+  "ipAddress": "177.10.174.12"
 }
 ```
 
-## Situações de interesse mínimas
-
-O enunciado exige pelo menos três situações de interesse detectadas a partir de eventos primitivos consumidos do Kafka [1]. Este projeto define quatro situações mínimas, superando o requisito base.
-
-### Situação 1: transação com valor muito acima do padrão do cliente
-
-Quando uma transação tem valor muito superior ao comportamento histórico da conta, o sistema considera a operação suspeita.
-
-#### Exemplo de regra
-
-- Se `amount > media_ultimas_transacoes * 5`, gerar alerta.
-
-#### Ação
-
-- Publicar evento em `fraud.alerts`.
-
-### Situação 2: muitas transações em uma janela curta de tempo
-
-Quando a mesma conta realiza várias transações em poucos segundos ou minutos, isso pode indicar automação, invasão de conta ou tentativa de esvaziamento de saldo.
-
-#### Exemplo de regra
-
-- Se uma conta gerar mais de 5 transações em 1 minuto, marcar como suspeita.
-
-#### Ação
-
-- Publicar evento em `fraud.alerts`.
-
-### Situação 3: transação em dispositivo não reconhecido
-
-Uma transação originada de um `device_id` nunca antes observado para aquele usuário pode representar tomada de conta ou uso de um aparelho clonado/roubado.
-
-#### Exemplo de regra
-
-- Se `device_id` da transação não existir no histórico confiável do `user_id`, gerar evento suspeito.
-
-#### Ação
-
-- Publicar evento em `fraud.alerts`.
-
-### Situação 4: alteração de senha seguida de transação relevante em poucos minutos
-
-Quando um usuário altera sua senha e, em um curto intervalo de tempo (ex: 5 minutos), realiza uma transação de valor elevado ou fora de seu padrão histórico, isso pode indicar que a conta foi comprometida e o invasor está agindo rapidamente antes que o usuário legítimo perceba a invasão.
-
-#### Exemplo de regra
-
-- Se um evento `password_change_event` ocorrer para um `user_id` e, nos próximos 5 minutos, uma transação desse mesmo `user_id` tiver `amount > 1000` ou `amount > media_historica * 3`, gerar alerta de alto risco.
-
-#### Ação
-
-- Publicar evento em `fraud.alerts` com severidade ALTA.
-
-## Situação complexa com evento derivado
-
-O enunciado pede explicitamente uma situação mais complexa na qual um consumidor processe eventos primitivos, infira conhecimento e produza novamente no Kafka um evento derivado ou composto [1].
-
-A melhor forma de atender a esse requisito é criar um **score de risco** por transação.
-
-### Ideia central
-
-Um consumidor lê eventos de múltiplos tópicos, cruza informações e calcula um valor de risco entre 0 e 100.
-
-Esse consumidor atua em dois papéis:
-
-- **Consumidor**, porque lê eventos primitivos.
-- **Produtor**, porque publica um novo evento derivado com o resultado da inferência [1].
-
-### Exemplo de evento derivado
+### FraudAlert
 
 ```json
 {
-  "transaction_id": "tx-123",
-  "account_id": "acc-88",
-  "risk_score": 91,
-  "reasons": [
-    "high_amount",
-    "new_device",
-    "3_transactions_in_2_minutes"
-  ],
-  "decision": "REVIEW"
+  "alertType": "ACCOUNT_TAKEOVER",
+  "userId": "u-000",
+  "description": "Account takeover: Suspect login -> Password change -> High value transaction (R$5000.00)",
+  "timestamp": 1715712000000
 }
 ```
 
-### Exemplo de cálculo de score
+---
 
-Uma lógica simples pode funcionar assim:
+## Consumidores e Detectores
 
-- Valor acima do padrão: +35 pontos.
-- Novo dispositivo: +25 pontos.
-- Alta frequência recente: +20 pontos.
-- Horário incomum: +10 pontos.
-- Falhas de login recentes: +15 pontos.
+### HighAmountConsumer
+- **Entrada:** `transactions.raw`
+- **Lógica:** Mantém histórico de valores por conta (janela de 5 min). Alerta se valor > 3× média ou primeira transação > R$ 8.000.
 
-A soma pode ser limitada em 100.
+### BurstTransactionConsumer
+- **Entrada:** `transactions.raw`
+- **Lógica:** Conta transações por conta em janela de 60 segundos. Alerta se ≥ 5 transações.
 
-### Interpretação do score
+### UnknownDeviceConsumer
+- **Entrada:** `transactions.raw`
+- **Lógica:** Compara `deviceId` da transação contra dispositivos confiáveis do `clients.json`.
 
-| Faixa | Interpretação | Ação |
-|---|---|---|
-| 0–39 | Baixo risco | Aprovar |
-| 40–69 | Médio risco | Gerar alerta e pedir validação extra |
-| 70–100 | Alto risco | Bloquear temporariamente ou enviar para revisão |
+### PasswordChangeConsumer
+- **Entrada:** `auth.events`
+- **Lógica:** Detecta troca de senha (`password_change`) precedida por login de dispositivo desconhecido.
 
-Esse mecanismo atende de forma muito clara ao requisito de evento derivado e ainda facilita a demonstração em sala.
+### AccountTakeoverConsumerProducer
+- **Entradas:** `auth.events` + `transactions.raw`
+- **Lógica:** State machine que rastreia: login desconhecido → troca de senha → transação de alto valor. Emite alerta para `fraud.events`.
 
-## Ações possíveis do sistema
+### EmptyingAccountConsumerProducer
+- **Entrada:** `transactions.raw`
+- **Lógica:** Detecta sequência de transações de alto valor que indicam tentativa de esvaziar a conta. Emite alerta para `fraud.events`.
 
-Quando uma situação de interesse for detectada, o sistema pode tomar uma ou mais ações, em linha com o enunciado, que menciona notificações, execução de serviços e produção de novos eventos [1].
+---
 
-As ações sugeridas são:
+## Produtores de Eventos
 
-- Publicar alerta em `fraud.alerts`.
-- Bloquear a transação e publicar em `transactions.blocked`.
-- Aprovar e publicar em `transactions.approved`.
-- Encaminhar para análise manual em `transactions.review`.
-- Solicitar autenticação adicional.
-- Atualizar dashboard em tempo real.
-- Registrar log de auditoria.
+### LegitimateEventProducer
+- Gera eventos normais continuamente
+- 70% de chance de transação, 30% de evento de autenticação
+- Valores entre R$ 150–200
+- Usa apenas dispositivos e IPs confiáveis
 
-## Simulação de dados
+### Produtores de Fraude
+Cada produtor injeta **um evento malicioso específico**:
 
-O enunciado informa que, caso o grupo não queira usar dados reais ou escolha um domínio sem API aberta adequada, é possível simular dados em tempo real para alimentar o sistema [1].
+| Producer | Comportamento |
+|----------|---------------|
+| `HighAmountFraudProducer` | Transação única entre R$ 8.000–15.000 |
+| `BurstTransactionFraudProducer` | 10 transações rápidas em sequência |
+| `UnknownDeviceFraudProducer` | Transação com `deviceId` aleatório (não confiável) |
+| `PasswordChangeFraudProducer` | Evento `password_change` após login de dispositivo desconhecido |
+| `AccountTakeoverFraudProducer` | Sequência completa: login desconhecido + troca de senha + transação alta |
+| `EmptyingAccountFraudProducer` | Múltiplas transações de alto valor seguidas |
 
-Nesse projeto, a simulação é uma escolha apropriada, porque dados financeiros reais normalmente são sensíveis e difíceis de obter publicamente.
+---
 
-### Estratégia de simulação
+## Exemplo de Fluxo Completo
 
-O simulador pode criar perfis de clientes com comportamentos distintos:
+```bash
+# Terminal 1 — infraestrutura
+make up
+make topics
+make clients
+make build
 
-- **Cliente conservador**: poucas transações e valores baixos.
-- **Cliente corporativo**: transações maiores e horário comercial.
-- **Cliente frequente**: muitas transações, mas com padrão previsível.
-- **Fraudador simulado**: valores altos, novos dispositivos, múltiplos destinatários e horários incomuns.
+# Terminal 2 — detectores (todos de uma vez)
+make tmux
 
-### Distribuição possível
+# Terminal 3 — eventos legítimos
+make simulate
 
-- 80% de transações normais.
-- 20% de transações suspeitas ou fraudulentas.
-
-### Casos simulados de fraude
-
-- Explosão de transações em sequência.
-- Transação por dispositivo novo.
-- PIX alto após troca de senha.
-- Operação em horário atípico.
-- Múltiplos destinos inéditos em poucos minutos.
-
-Esse tipo de simulação facilita a demonstração, pois permite controlar exatamente quando as regras devem disparar.
-
-## Tecnologias sugeridas
-
-Uma stack simples e eficaz para o projeto pode ser:
-
-| Camada | Tecnologia sugerida |
-|---|---|
-| Mensageria | Apache Kafka |
-| Execução local | Docker Compose |
-| Produtores/consumidores | Python ou Java |
-| Processamento de fluxo | Kafka Streams ou lógica própria com consumidores |
-| Persistência opcional | PostgreSQL ou MongoDB |
-| Visualização | Streamlit, Grafana ou dashboard web simples |
-
-### Sugestão prática para implementação rápida
-
-Se o grupo quiser priorizar simplicidade de entrega, a combinação abaixo tende a ser suficiente:
-
-- Kafka em Docker Compose.
-- Produtores e consumidores em Python.
-- Simulador gerando JSON.
-- Dashboard em Streamlit.
-
-Essa abordagem reduz complexidade operacional e ainda demonstra bem os conceitos centrais do trabalho.
-
-## Organização em microserviços
-
-Uma divisão possível de serviços é a seguinte:
-
-| Serviço | Responsabilidade |
-|---|---|
-| `transaction-simulator` | Gerar transações financeiras |
-| `auth-simulator` | Gerar eventos de autenticação e contexto |
-| `rule-engine` | Aplicar regras simples sobre eventos primitivos |
-| `risk-aggregator` | Correlacionar eventos e gerar score de risco |
-| `decision-engine` | Tomar decisão final sobre a transação |
-| `dashboard-service` | Expor visualização em tempo real |
-
-Essa modularização deixa a arquitetura clara e ajuda muito na apresentação do projeto.
-
-## Exemplo de fluxo completo
-
-Um cenário completo de execução pode ser descrito assim:
-
-1. Um usuário faz login a partir de um dispositivo novo.
-2. Logo depois, o sistema recebe um evento de alteração de senha.
-3. Em seguida, ocorre uma transação PIX de alto valor.
-4. O `rule-engine` identifica valor alto e dispositivo desconhecido.
-5. O `risk-aggregator` combina os sinais e calcula score 85.
-6. O evento derivado é publicado em `risk.scores`.
-7. O `decision-engine` consome esse evento e decide bloquear a operação.
-8. Um alerta é publicado e o dashboard exibe a ocorrência.
-
-Esse exemplo ajuda a demonstrar, de forma didática, a diferença entre evento primitivo, correlação de eventos e evento derivado.
-
-## Métricas e dashboard
-
-O enunciado lista como funcionalidade desejável a visualização das situações de interesse em dashboards, planilhas ou arquivos [1].
-
-Um dashboard simples pode conter:
-
-- Total de transações recebidas por minuto.
-- Quantidade de alertas por tipo.
-- Top 10 contas com maior score de risco.
-- Distribuição de scores de risco.
-- Quantidade de transações aprovadas, bloqueadas e em revisão.
-- Linha do tempo de eventos recentes.
-
-### Indicadores visuais úteis
-
-- Verde: transação aprovada.
-- Amarelo: alerta gerado.
-- Vermelho: transação bloqueada.
-- Azul: operação enviada para revisão manual.
-
-## Estrutura sugerida do projeto
-
-Uma estrutura de pastas possível seria:
-
-```text
-fraud-detection-kafka/
-├── docker-compose.yml
-├── producer/
-│   ├── transaction_simulator.py
-│   └── auth_simulator.py
-├── consumers/
-│   ├── rule_engine.py
-│   ├── risk_aggregator.py
-│   └── decision_engine.py
-├── dashboard/
-│   └── app.py
-├── schemas/
-│   ├── transaction.json
-│   ├── auth_event.json
-│   └── risk_score.json
-└── README.md
+# Terminal 4 — injetar fraude
+make high-amount
+make burst
+make unknown-device
 ```
-
-Essa estrutura ajuda o grupo a dividir o trabalho entre os integrantes e facilita a manutenção do projeto.
-
-## Possível divisão entre integrantes
-
-Como o projeto pode ser feito em trio, uma divisão equilibrada pode ser [1]:
-
-- **Pessoa 1**: infraestrutura Kafka, Docker Compose e tópicos.
-- **Pessoa 2**: simuladores e produtores de eventos.
-- **Pessoa 3**: consumidores, score de risco e dashboard.
-
-Se todos quiserem contribuir em apresentação e integração, essa divisão ainda permite um fechamento conjunto.
-
-## Roteiro de demonstração
-
-Para a apresentação de 10 a 15 minutos mencionada no enunciado [1], um roteiro simples pode ser:
-
-1. Apresentar o problema de fraude financeira.
-2. Mostrar a arquitetura orientada a eventos.
-3. Explicar os tópicos Kafka.
-4. Mostrar os eventos primitivos.
-5. Explicar as quatro situações de interesse.
-6. Demonstrar o evento derivado de score de risco.
-7. Executar uma simulação ao vivo.
-8. Mostrar o dashboard reagindo em tempo real.
-
-## Diferenciais que podem valorizar o trabalho
-
-Alguns pontos podem deixar o projeto mais interessante:
-
-- Uso de janelas temporais para contar eventos por minuto.
-- Explicabilidade do score de risco por meio do campo `reasons`.
-- Dashboard com atualização automática.
-- Logs de auditoria de decisões.
-- Possibilidade de extensão futura para machine learning.
-
-Esses diferenciais não são obrigatórios, mas melhoram a qualidade técnica e a narrativa da apresentação.
-
-## Limitações e simplificações aceitáveis
-
-Como se trata de um projeto acadêmico, algumas simplificações são aceitáveis:
-
-- O score pode ser baseado em regras, sem necessidade de modelo de IA.
-- O histórico do usuário pode ficar em memória ou em banco simples.
-- O simulador pode gerar perfis artificiais em vez de integrar uma API real.
-- A autenticação adicional pode ser apenas simulada por um novo evento.
-
-Essas simplificações mantêm o projeto viável sem comprometer os requisitos do enunciado.
-
-## Conclusão
-
-A proposta de um sistema de detecção de transações fraudulentas com Kafka é totalmente compatível com a atividade, pois permite construir uma arquitetura orientada a eventos com produtores, consumidores e brokers Kafka, definir situações de interesse a partir de eventos primitivos e produzir eventos derivados para decisões mais complexas [1].
-
-Além de ser tecnicamente adequada, essa proposta também é forte para apresentação, porque combina um problema realista, uma arquitetura clara, regras fáceis de explicar e uma demonstração visual convincente com alertas e dashboard em tempo real [1].
