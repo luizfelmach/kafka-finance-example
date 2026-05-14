@@ -29,6 +29,7 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "unknown-device" "Simulate unknown device fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "password-change" "Simulate password change fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "account-takeover" "Simulate account takeover fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "emptying-account" "Simulate emptying account fraud"
 	@echo ""
 	@echo "Fraud Consumers"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-high-amount" "Detect high amount fraud"
@@ -36,9 +37,10 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-unknown-device" "Detect unknown device fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-password-change" "Detect password change fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-account-takeover" "Detect account takeover fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-emptying-account" "Detect emptying account fraud"
 	@echo ""
 	@echo "Tmux"
-	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 5 tmux panes with all fraud detectors"
+	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 6 tmux panes with all fraud detectors"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-kill" "Kill the tmux session"
 	@echo ""
 	@echo "Kafka"
@@ -157,4 +159,4 @@ tmux-kill: ## Kill the tmux session
 	@echo "→ Killing tmux session..."
 	tmux kill-session -t fraud-detection
 
-.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change account-takeover detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux
+.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux tmux-kill
