@@ -28,15 +28,17 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "burst" "Simulate burst transaction fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "unknown-device" "Simulate unknown device fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "password-change" "Simulate password change fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "account-takeover" "Simulate account takeover fraud"
 	@echo ""
 	@echo "Fraud Consumers"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-high-amount" "Detect high amount fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-burst" "Detect burst transaction fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-unknown-device" "Detect unknown device fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-password-change" "Detect password change fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-account-takeover" "Detect account takeover fraud"
 	@echo ""
 	@echo "Tmux"
-	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 4 tmux panes with all fraud detectors"
+	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 5 tmux panes with all fraud detectors"
 	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
@@ -97,6 +99,10 @@ password-change: build ## Simulate password change fraud
 	@echo "→ Running PasswordChangeFraudProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.PasswordChangeFraudProducer
 
+account-takeover: build ## Simulate account takeover fraud (combines multiple fraud types)
+	@echo "→ Running AccountTakeoverFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.AccountTakeoverFraudProducer
+
 detect-high-amount: build ## Detect high amount fraud
 	@echo "→ Running HighAmountConsumer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer
@@ -113,17 +119,30 @@ detect-password-change: build ## Detect password change fraud
 	@echo "→ Running PasswordChangeConsumer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer
 
-tmux: build ## Open 4 tmux panes with all fraud detectors
+detect-account-takeover: build ## Detect account takeover fraud
+	@echo "→ Running AccountTakeoverConsumerProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.consumers.AccountTakeoverConsumerProducer
+
+tmux: build ## Open 5 tmux panes with all fraud detectors
 	@echo "→ Starting tmux session with fraud detectors..."
 	tmux new-session -d -s fraud-detection -n detectors
-	tmux split-window -v -t fraud-detection
-	tmux split-window -v -t fraud-detection
-	tmux split-window -v -t fraud-detection
-	tmux send-keys -t fraud-detection:0.0 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer' C-m
-	tmux send-keys -t fraud-detection:0.1 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.BurstTransactionConsumer' C-m
-	tmux send-keys -t fraud-detection:0.2 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer' C-m
-	tmux send-keys -t fraud-detection:0.3 'cd $(PWD) && java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer' C-m
-	tmux select-layout -t fraud-detection even-vertical
+	tmux split-window -t fraud-detection
+	tmux select-layout -t fraud-detection tiled
+	tmux split-window -t fraud-detection
+	tmux select-layout -t fraud-detection tiled
+	tmux split-window -t fraud-detection
+	tmux select-layout -t fraud-detection tiled
+	tmux split-window -t fraud-detection
+	tmux select-layout -t fraud-detection tiled
+	tmux send-keys -t fraud-detection:0.0 'java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer' C-m
+	tmux send-keys -t fraud-detection:0.1 'java -cp $(JAVA_JAR) com.frauddetection.consumers.BurstTransactionConsumer' C-m
+	tmux send-keys -t fraud-detection:0.2 'java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer' C-m
+	tmux send-keys -t fraud-detection:0.3 'java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer' C-m
+	tmux send-keys -t fraud-detection:0.4 'java -cp $(JAVA_JAR) com.frauddetection.consumers.AccountTakeoverConsumerProducer' C-m
 	tmux attach -t fraud-detection
 
-.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change detect-high-amount detect-burst detect-unknown-device detect-password-change tmux
+tmux-kill: ## Kill the tmux session
+	@echo "→ Killing tmux session..."
+	tmux kill-session -t fraud-detection
+
+.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change account-takeover detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover tmux
