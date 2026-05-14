@@ -44,6 +44,9 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-kill" "Kill the tmux session"
 	@echo ""
 	@echo "Kafka"
+	@printf "  \033[36m%-14s\033[0m %s\n" "topics" "Create the 3 required Kafka topics (3 partitions, RF=3)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "topics-view" "List all Kafka topics"
+	@printf "  \033[36m%-14s\033[0m %s\n" "topics-describe" "Show detailed info for all application topics"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen" "Listen to a topic (TOPIC=name make listen)"
 	@echo ""
 
@@ -80,6 +83,23 @@ clients: build ## Generate clients.json with simulated client metadata
 simulate: build ## Run LegitimateEventProducer
 	@echo "→ Running LegitimateEventProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.LegitimateEventProducer
+
+topics: ## Create the 3 required Kafka topics (3 partitions, RF=3)
+	@echo "→ Creating Kafka topics..."
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic transactions.raw --partitions 3 --replication-factor 3
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic auth.events --partitions 3 --replication-factor 3
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic fraud.events --partitions 3 --replication-factor 3
+	@echo "✓ Topics created"
+
+topics-view: ## List all Kafka topics
+	@echo "→ Listing Kafka topics..."
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+topics-describe: ## Show detailed info for all application topics
+	@echo "→ Describing application topics..."
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic transactions.raw
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic auth.events
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic fraud.events
 
 listen: ## Listen to a Kafka topic (usage: TOPIC=name make listen)
 	@if [ -z "$(TOPIC)" ]; then echo "Error: TOPIC is not set. Usage: TOPIC=name make listen"; exit 1; fi
@@ -159,4 +179,4 @@ tmux-kill: ## Kill the tmux session
 	@echo "→ Killing tmux session..."
 	tmux kill-session -t fraud-detection
 
-.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux tmux-kill
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux tmux-kill
