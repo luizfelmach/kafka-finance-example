@@ -104,6 +104,10 @@ account-takeover: build ## Simulate account takeover fraud (combines multiple fr
 	@echo "→ Running AccountTakeoverFraudProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.AccountTakeoverFraudProducer
 
+emptying-account: build ## Simulate emptying account fraud (combine multiple fraud types)
+	@echo "→ Running EmptyingAccountFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.EmptyingAccountFraudProducer
+
 detect-high-amount: build ## Detect high amount fraud
 	@echo "→ Running HighAmountConsumer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer
@@ -124,9 +128,15 @@ detect-account-takeover: build ## Detect account takeover fraud
 	@echo "→ Running AccountTakeoverConsumerProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.AccountTakeoverConsumerProducer
 
+detect-emptying-account: build ## Detect emptying account fraud
+	@echo "→ Running EmptyingAccountConsumerProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer
+
 tmux: build ## Open 5 tmux panes with all fraud detectors
 	@echo "→ Starting tmux session with fraud detectors..."
 	tmux new-session -d -s fraud-detection -n detectors
+	tmux split-window -t fraud-detection
+	tmux select-layout -t fraud-detection tiled
 	tmux split-window -t fraud-detection
 	tmux select-layout -t fraud-detection tiled
 	tmux split-window -t fraud-detection
@@ -140,10 +150,11 @@ tmux: build ## Open 5 tmux panes with all fraud detectors
 	tmux send-keys -t fraud-detection:0.2 'java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer' C-m
 	tmux send-keys -t fraud-detection:0.3 'java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer' C-m
 	tmux send-keys -t fraud-detection:0.4 'java -cp $(JAVA_JAR) com.frauddetection.consumers.AccountTakeoverConsumerProducer' C-m
+	tmux send-keys -t fraud-detection:0.5 'java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer' C-m
 	tmux attach -t fraud-detection
 
 tmux-kill: ## Kill the tmux session
 	@echo "→ Killing tmux session..."
 	tmux kill-session -t fraud-detection
 
-.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change account-takeover detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover tmux
+.PHONY: help up down restart build clean clients simulate listen high-amount burst unknown-device password-change account-takeover detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux
