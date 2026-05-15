@@ -14,7 +14,7 @@ public class EmptyingAccountFraudProducer {
 
     private static final Random RANDOM = new Random();
     private static final List<String> TRANSACTION_TYPES = List.of("PIX", "CRED", "DEB");
-    private static final int BURST_COUNT = 4;
+    private static final int BURST_COUNT = 6;
     private static final double HIGH_VALUE_AMOUNT = 8500.0;
 
     public static void main(String[] args) {

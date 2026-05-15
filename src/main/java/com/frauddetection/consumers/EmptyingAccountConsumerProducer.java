@@ -24,7 +24,7 @@ public class EmptyingAccountConsumerProducer {
 
     private static final long BURST_WINDOW_MS = 60 * 1000;     // 1 minuto
     private static final double HIGH_VALUE_THRESHOLD = 1000.0;
-    private static final int BURST_THRESHOLD = 3;
+    private static final int BURST_THRESHOLD = 5;
 
     private static final Map<String, List<Long>> recentHighValueTxTimes = new ConcurrentHashMap<>();
     private static final ObjectMapper objectMapper = new ObjectMapper();
