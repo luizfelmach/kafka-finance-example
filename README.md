@@ -90,6 +90,24 @@ Este projeto demonstra um pipeline completo de detecção de fraudes financeiras
 - **Docker** e **Docker Compose**
 - **Tmux** (opcional, para execução paralela dos detectores)
 
+### Consumer groups
+
+Cada detector roda em um **grupo de consumo próprio**. Para escalar horizontalmente, passe um `group.id` customizado como argumento:
+
+```bash
+# 3 instâncias do HighAmountConsumer no mesmo grupo
+java -cp target/kafka-finance-example-1.0-SNAPSHOT.jar \
+  com.frauddetection.consumers.HighAmountConsumer "meu-grupo" &
+java -cp target/kafka-finance-example-1.0-SNAPSHOT.jar \
+  com.frauddetection.consumers.HighAmountConsumer "meu-grupo" &
+java -cp target/kafka-finance-example-1.0-SNAPSHOT.jar \
+  com.frauddetection.consumers.HighAmountConsumer "meu-grupo" &
+```
+
+O Kafka distribui as 3 partições automaticamente entre as instâncias. O `tmux-scaled` faz exatamente isso.
+
+O projeto usa **CooperativeStickyAssignor** como estratégia de partição, permitindo rebalanceamentos incrementais sem interromper todas as instâncias.
+
 ---
 
 ## Estrutura do Projeto
@@ -237,7 +255,8 @@ Gera o JAR sombreado em `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
 | Comando | Descrição |
 |---------|-----------|
 | `make tmux` | Abre 6 painéis com todos os detectores simultaneamente |
-| `make tmux-kill` | Encerra a sessão tmux |
+| `make tmux-scaled CONSUMER=<tipo> SCALE=N` | Abre N painéis com N instâncias do mesmo consumer (balanceamento de carga) |
+| `make tmux-kill` | Encerra todas as sessões tmux do projeto |
 
 ### Kafka Utils
 
@@ -330,8 +349,8 @@ Gera o JAR sombreado em `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
 - **Lógica:** Compara `deviceId` da transação contra dispositivos confiáveis do `clients.json`.
 
 ### PasswordChangeConsumer
-- **Entrada:** `auth.events`
-- **Lógica:** Detecta troca de senha (`password_change`) precedida por login de dispositivo desconhecido.
+- **Entradas:** `auth.events` + `transactions.raw`
+- **Lógica:** Detecta troca de senha (`password_change`) seguida de transação de alto valor (> R$ 1.000) em até 5 minutos.
 
 ### AccountTakeoverConsumerProducer
 - **Entradas:** `auth.events` + `transactions.raw`
