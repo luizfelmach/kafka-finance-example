@@ -30,7 +30,8 @@ public class EmptyingAccountConsumerProducer {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static void main(String[] args) {
-        Properties consumerProps = KafkaConfig.consumerProps("emptying-account-group");
+        String groupId = args.length > 0 ? args[0] : "emptying-account-group";
+        Properties consumerProps = KafkaConfig.consumerProps(groupId);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
 

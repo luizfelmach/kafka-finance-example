@@ -23,7 +23,8 @@ public class BurstTransactionConsumer {
         new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
-        Properties props = KafkaConfig.consumerProps("burst-consumer");
+        String groupId = args.length > 0 ? args[0] : "burst-consumer";
+        Properties props = KafkaConfig.consumerProps(groupId);
         props.put(
             org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
             TransactionEventDeserializer.class.getName()

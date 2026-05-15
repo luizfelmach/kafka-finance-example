@@ -4,6 +4,7 @@
 COMPOSE_FILE := compose.yaml
 JAVA_JAR := target/kafka-finance-example-1.0-SNAPSHOT.jar
 CLIENTS_FILE := clients.json
+SCALE ?= 1
 
 .DEFAULT_GOAL := help
 
@@ -42,6 +43,14 @@ help: ## Show this help message
 	@echo "Tmux"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 6 tmux panes with all fraud detectors"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-kill" "Kill the tmux session"
+	@echo ""
+	@echo "Scaled Consumers (SCALE=N)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-high-amount-scaled" "Launch N HighAmountConsumer instances"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-burst-scaled" "Launch N BurstTransactionConsumer instances"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-unknown-device-scaled" "Launch N UnknownDeviceConsumer instances"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-password-change-scaled" "Launch N PasswordChangeConsumer instances"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-account-takeover-scaled" "Launch N AccountTakeoverConsumerProducer instances"
+	@printf "  \033[36m%-14s\033[0m %s\n" "detect-emptying-account-scaled" "Launch N EmptyingAccountConsumerProducer instances"
 	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "topics" "Create the 3 required Kafka topics (3 partitions, RF=3)"
@@ -154,6 +163,48 @@ detect-emptying-account: build ## Detect emptying account fraud
 	@echo "→ Running EmptyingAccountConsumerProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer
 
+detect-high-amount-scaled: build ## Launch N HighAmountConsumer instances (SCALE=N)
+	@echo "→ Starting $(SCALE) HighAmountConsumer instances..."
+	@for i in $$(seq 1 $(SCALE)); do \
+		java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer "scalable-high-amount" & \
+	done; \
+	wait
+
+detect-burst-scaled: build ## Launch N BurstTransactionConsumer instances (SCALE=N)
+	@echo "→ Starting $(SCALE) BurstTransactionConsumer instances..."
+	@for i in $$(seq 1 $(SCALE)); do \
+		java -cp $(JAVA_JAR) com.frauddetection.consumers.BurstTransactionConsumer "scalable-burst" & \
+	done; \
+	wait
+
+detect-unknown-device-scaled: build ## Launch N UnknownDeviceConsumer instances (SCALE=N)
+	@echo "→ Starting $(SCALE) UnknownDeviceConsumer instances..."
+	@for i in $$(seq 1 $(SCALE)); do \
+		java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer "scalable-unknown-device" & \
+	done; \
+	wait
+
+detect-password-change-scaled: build ## Launch N PasswordChangeConsumer instances (SCALE=N)
+	@echo "→ Starting $(SCALE) PasswordChangeConsumer instances..."
+	@for i in $$(seq 1 $(SCALE)); do \
+		java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer "scalable-password-change" & \
+	done; \
+	wait
+
+detect-account-takeover-scaled: build ## Launch N AccountTakeoverConsumerProducer instances (SCALE=N)
+	@echo "→ Starting $(SCALE) AccountTakeoverConsumerProducer instances..."
+	@for i in $$(seq 1 $(SCALE)); do \
+		java -cp $(JAVA_JAR) com.frauddetection.consumers.AccountTakeoverConsumerProducer "scalable-account-takeover" & \
+	done; \
+	wait
+
+detect-emptying-account-scaled: build ## Launch N EmptyingAccountConsumerProducer instances (SCALE=N)
+	@echo "→ Starting $(SCALE) EmptyingAccountConsumerProducer instances..."
+	@for i in $$(seq 1 $(SCALE)); do \
+		java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer "scalable-emptying-account" & \
+	done; \
+	wait
+
 tmux: build ## Open 5 tmux panes with all fraud detectors
 	@echo "→ Starting tmux session with fraud detectors..."
 	tmux new-session -d -s fraud-detection -n detectors
@@ -179,4 +230,4 @@ tmux-kill: ## Kill the tmux session
 	@echo "→ Killing tmux session..."
 	tmux kill-session -t fraud-detection
 
-.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux tmux-kill
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account detect-high-amount-scaled detect-burst-scaled detect-unknown-device-scaled detect-password-change-scaled detect-account-takeover-scaled detect-emptying-account-scaled tmux tmux-kill

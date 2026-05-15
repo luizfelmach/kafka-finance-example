@@ -24,7 +24,8 @@ public class UnknownDeviceConsumer {
             trustedDevices.put(c.userId(), c.trustedDevices());
         }
 
-        Properties props = KafkaConfig.consumerProps("unknown-device-consumer");
+        String groupId = args.length > 0 ? args[0] : "unknown-device-consumer";
+        Properties props = KafkaConfig.consumerProps(groupId);
         props.put(
             org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
             TransactionEventDeserializer.class.getName()

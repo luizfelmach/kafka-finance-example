@@ -24,7 +24,8 @@ public class HighAmountConsumer {
         new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
-        Properties props = KafkaConfig.consumerProps("high-amount-consumer");
+        String groupId = args.length > 0 ? args[0] : "high-amount-consumer";
+        Properties props = KafkaConfig.consumerProps(groupId);
         props.put(
             org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
             TransactionEventDeserializer.class.getName()
