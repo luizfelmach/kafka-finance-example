@@ -42,15 +42,8 @@ help: ## Show this help message
 	@echo ""
 	@echo "Tmux"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux" "Open 6 tmux panes with all fraud detectors"
+	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-scaled" "Launch N consumer instances in tmux (CONSUMER=high-amount|burst|unknown-device|password-change|account-takeover|emptying-account, SCALE=N)"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-kill" "Kill the tmux session"
-	@echo ""
-	@echo "Scaled Consumers (SCALE=N)"
-	@printf "  \033[36m%-14s\033[0m %s\n" "detect-high-amount-scaled" "Launch N HighAmountConsumer instances"
-	@printf "  \033[36m%-14s\033[0m %s\n" "detect-burst-scaled" "Launch N BurstTransactionConsumer instances"
-	@printf "  \033[36m%-14s\033[0m %s\n" "detect-unknown-device-scaled" "Launch N UnknownDeviceConsumer instances"
-	@printf "  \033[36m%-14s\033[0m %s\n" "detect-password-change-scaled" "Launch N PasswordChangeConsumer instances"
-	@printf "  \033[36m%-14s\033[0m %s\n" "detect-account-takeover-scaled" "Launch N AccountTakeoverConsumerProducer instances"
-	@printf "  \033[36m%-14s\033[0m %s\n" "detect-emptying-account-scaled" "Launch N EmptyingAccountConsumerProducer instances"
 	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "topics" "Create the 3 required Kafka topics (3 partitions, RF=3)"
@@ -163,47 +156,28 @@ detect-emptying-account: build ## Detect emptying account fraud
 	@echo "→ Running EmptyingAccountConsumerProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer
 
-detect-high-amount-scaled: build ## Launch N HighAmountConsumer instances (SCALE=N)
-	@echo "→ Starting $(SCALE) HighAmountConsumer instances..."
-	@for i in $$(seq 1 $(SCALE)); do \
-		java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer "scalable-high-amount" & \
+tmux-scaled: CONSUMER ?= high-amount
+tmux-scaled: SCALE ?= 3
+tmux-scaled: build ## Launch N consumer instances in tmux (CONSUMER=name, SCALE=N)
+	@case "$(CONSUMER)" in \
+		high-amount)      C="HighAmountConsumer";              G="tmux-high-amount" ;; \
+		burst)            C="BurstTransactionConsumer";        G="tmux-burst" ;; \
+		unknown-device)   C="UnknownDeviceConsumer";           G="tmux-unknown-device" ;; \
+		password-change)  C="PasswordChangeConsumer";          G="tmux-password-change" ;; \
+		account-takeover) C="AccountTakeoverConsumerProducer"; G="tmux-account-takeover" ;; \
+		emptying-account) C="EmptyingAccountConsumerProducer"; G="tmux-emptying-account" ;; \
+		*) echo "Unknown consumer '$(CONSUMER)'. Options: high-amount, burst, unknown-device, password-change, account-takeover, emptying-account"; exit 1 ;; \
+	esac; \
+	echo "→ Starting tmux: $(SCALE)x $$C (group=$$G)..."; \
+	tmux new-session -d -s fraud-scaled -n "$$C"; \
+	for i in $$(seq 2 $(SCALE)); do \
+		tmux split-window -t fraud-scaled; \
+		tmux select-layout -t fraud-scaled tiled; \
 	done; \
-	wait
-
-detect-burst-scaled: build ## Launch N BurstTransactionConsumer instances (SCALE=N)
-	@echo "→ Starting $(SCALE) BurstTransactionConsumer instances..."
-	@for i in $$(seq 1 $(SCALE)); do \
-		java -cp $(JAVA_JAR) com.frauddetection.consumers.BurstTransactionConsumer "scalable-burst" & \
+	for i in $$(seq 0 $$(( $(SCALE) - 1 ))); do \
+		tmux send-keys -t fraud-scaled:0.$$i "java -cp $(JAVA_JAR) com.frauddetection.consumers.$$C \"$$G\"" C-m; \
 	done; \
-	wait
-
-detect-unknown-device-scaled: build ## Launch N UnknownDeviceConsumer instances (SCALE=N)
-	@echo "→ Starting $(SCALE) UnknownDeviceConsumer instances..."
-	@for i in $$(seq 1 $(SCALE)); do \
-		java -cp $(JAVA_JAR) com.frauddetection.consumers.UnknownDeviceConsumer "scalable-unknown-device" & \
-	done; \
-	wait
-
-detect-password-change-scaled: build ## Launch N PasswordChangeConsumer instances (SCALE=N)
-	@echo "→ Starting $(SCALE) PasswordChangeConsumer instances..."
-	@for i in $$(seq 1 $(SCALE)); do \
-		java -cp $(JAVA_JAR) com.frauddetection.consumers.PasswordChangeConsumer "scalable-password-change" & \
-	done; \
-	wait
-
-detect-account-takeover-scaled: build ## Launch N AccountTakeoverConsumerProducer instances (SCALE=N)
-	@echo "→ Starting $(SCALE) AccountTakeoverConsumerProducer instances..."
-	@for i in $$(seq 1 $(SCALE)); do \
-		java -cp $(JAVA_JAR) com.frauddetection.consumers.AccountTakeoverConsumerProducer "scalable-account-takeover" & \
-	done; \
-	wait
-
-detect-emptying-account-scaled: build ## Launch N EmptyingAccountConsumerProducer instances (SCALE=N)
-	@echo "→ Starting $(SCALE) EmptyingAccountConsumerProducer instances..."
-	@for i in $$(seq 1 $(SCALE)); do \
-		java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer "scalable-emptying-account" & \
-	done; \
-	wait
+	tmux attach -t fraud-scaled
 
 tmux: build ## Open 5 tmux panes with all fraud detectors
 	@echo "→ Starting tmux session with fraud detectors..."
@@ -226,8 +200,9 @@ tmux: build ## Open 5 tmux panes with all fraud detectors
 	tmux send-keys -t fraud-detection:0.5 'java -cp $(JAVA_JAR) com.frauddetection.consumers.EmptyingAccountConsumerProducer' C-m
 	tmux attach -t fraud-detection
 
-tmux-kill: ## Kill the tmux session
-	@echo "→ Killing tmux session..."
-	tmux kill-session -t fraud-detection
+tmux-kill: ## Kill all tmux sessions (fraud-detection, fraud-scaled)
+	@echo "→ Killing tmux sessions..."
+	-tmux kill-session -t fraud-detection 2>/dev/null
+	-tmux kill-session -t fraud-scaled 2>/dev/null
 
-.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account detect-high-amount-scaled detect-burst-scaled detect-unknown-device-scaled detect-password-change-scaled detect-account-takeover-scaled detect-emptying-account-scaled tmux tmux-kill
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux tmux-scaled tmux-kill
