@@ -36,8 +36,8 @@ Este projeto demonstra um pipeline completo de detecção de fraudes financeiras
 ## Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        PRODUTORES                                │
+┌────────────────────────────────────────────────────────────────┐
+│                        PRODUTORES                              │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
 │  │ LegitimateEvent │  │ FraudProducers  │  │ FraudProducers  │ │
 │  │   Producer      │  │  (6 tipos)      │  │  (6 tipos)      │ │
@@ -54,16 +54,16 @@ Este projeto demonstra um pipeline completo de detecção de fraudes financeiras
            │                    │
            ▼                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      CONSUMIDORES / DETECTORES                   │
+│                      CONSUMIDORES / DETECTORES                  │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌────────────┐ │
 │  │ HighAmount  │ │   Burst     │ │   Unknown   │ │ Password   │ │
 │  │  Consumer   │ │ Transaction │ │   Device    │ │  Change    │ │
 │  │             │ │  Consumer   │ │  Consumer   │ │  Consumer  │ │
 │  └─────────────┘ └─────────────┘ └─────────────┘ └────────────┘ │
-│  ┌─────────────────┐ ┌─────────────────┐                         │
-│  │ AccountTakeover │ │ EmptyingAccount │                         │
-│  │ConsumerProducer │ │ConsumerProducer │                         │
-│  └─────────────────┘ └─────────────────┘                         │
+│  ┌─────────────────┐ ┌─────────────────┐                        │
+│  │ AccountTakeover │ │ EmptyingAccount │                        │
+│  │ConsumerProducer │ │ConsumerProducer │                        │
+│  └─────────────────┘ └─────────────────┘                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,23 +90,9 @@ Este projeto demonstra um pipeline completo de detecção de fraudes financeiras
 - **Docker** e **Docker Compose**
 - **Tmux** (opcional, para execução paralela dos detectores)
 
-### Consumer groups
+### Escalabilidade
 
-Cada detector roda em um **grupo de consumo próprio**. Para escalar horizontalmente, passe um `group.id` customizado como argumento:
-
-```bash
-# 3 instâncias do HighAmountConsumer no mesmo grupo
-java -cp target/kafka-finance-example-1.0-SNAPSHOT.jar \
-  com.frauddetection.consumers.HighAmountConsumer "meu-grupo" &
-java -cp target/kafka-finance-example-1.0-SNAPSHOT.jar \
-  com.frauddetection.consumers.HighAmountConsumer "meu-grupo" &
-java -cp target/kafka-finance-example-1.0-SNAPSHOT.jar \
-  com.frauddetection.consumers.HighAmountConsumer "meu-grupo" &
-```
-
-O Kafka distribui as 3 partições automaticamente entre as instâncias. O `tmux-scaled` faz exatamente isso.
-
-O projeto usa **CooperativeStickyAssignor** como estratégia de partição, permitindo rebalanceamentos incrementais sem interromper todas as instâncias.
+Cada consumer aceita o nome do grupo como argumento opcional. Para escalar horizontalmente, execute N instâncias com o mesmo `group.id` — o Kafka distribui as partições automaticamente entre elas. Consulte `make help` para detalhes.
 
 ---
 
@@ -276,7 +262,7 @@ Gera o JAR sombreado em `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
 | **HIGH_AMOUNT** | Transação com valor muito acima da média histórica | Se primeira transação > R$ 8.000 OU valor > 3× média móvel (janela de 5 min) |
 | **BURST_TRANSACTIONS** | Muitas transações em curto intervalo | ≥ 5 transações em 60 segundos por conta |
 | **UNKNOWN_DEVICE** | Dispositivo não cadastrado realiza transação | Verifica `deviceId` contra `trusted_devices` do perfil |
-| **PASSWORD_CHANGE** | Alteração de senha seguida de transação suspeita | Troca de senha após login de dispositivo desconhecido |
+| **PASSWORD_CHANGE** | Alteração de senha seguida de transação de alto valor | Troca de senha + transação alta em até 5 minutos |
 | **ACCOUNT_TAKEOVER** | Sequência completa de invasão | Login desconhecido → troca de senha → transação de alto valor (dentro de 10 min) |
 | **EMPTYING_ACCOUNT** | Tentativa de esvaziar saldo da conta | Múltiplas transações de alto valor em sequência |
 
