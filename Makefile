@@ -86,11 +86,12 @@ simulate: build ## Run LegitimateEventProducer
 	@echo "→ Running LegitimateEventProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.LegitimateEventProducer
 
-topics: ## Create the 3 required Kafka topics (3 partitions, RF=3)
+topics: ## Create the 4 required Kafka topics (transactions.raw, auth.events, fraud.events 3p/RF=3, clients.profiles 1p/compact)
 	@echo "→ Creating Kafka topics..."
 	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic transactions.raw --partitions 3 --replication-factor 3
 	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic auth.events --partitions 3 --replication-factor 3
 	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic fraud.events --partitions 3 --replication-factor 3
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic clients.profiles --partitions 1 --replication-factor 3 --config cleanup.policy=compact
 	@echo "✓ Topics created"
 
 topics-view: ## List all Kafka topics
@@ -102,6 +103,7 @@ topics-describe: ## Show detailed info for all application topics
 	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic transactions.raw
 	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic auth.events
 	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic fraud.events
+	docker exec kafka-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic clients.profiles
 
 listen: ## Listen to a Kafka topic (usage: TOPIC=name make listen)
 	@if [ -z "$(TOPIC)" ]; then echo "Error: TOPIC is not set. Usage: TOPIC=name make listen"; exit 1; fi
