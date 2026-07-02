@@ -2,6 +2,8 @@
 venv
 .git/
 clients.json
+*.pdf
+gambiarra/
 
 # Java / Maven
 target/
