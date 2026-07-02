@@ -1,9 +1,12 @@
 package com.frauddetection.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class AuthEvent {
 
     private String eventId;
@@ -72,6 +75,7 @@ public class AuthEvent {
         this.recentFailedAttempts = recentFailedAttempts;
     }
 
+    @JsonIgnore
     public GeoLocation getGeoLocation() {
         return new GeoLocation(latitude, longitude);
     }

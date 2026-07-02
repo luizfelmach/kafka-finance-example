@@ -27,7 +27,7 @@ public class ParallelLoginTopology {
             .filter((windowedKey, count) -> count > 1)
             .map((windowedKey, count) -> KeyValue.pair(
                 windowedKey.key(),
-                FraudAlert.parallelLogin("Parallel login detected: " + count + " sessions")
+                FraudAlert.parallelLogin(windowedKey.key(), "Parallel login detected: " + count + " sessions")
             ))
             .to(KafkaConfig.TOPIC_FRAUD_EVENTS, Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
     }

@@ -141,25 +141,25 @@ public class FraudAlert {
         );
     }
 
-    public static FraudAlert emptyingAccount(String description) {
+    public static FraudAlert emptyingAccount(String accountId, String userId, String description) {
         return new FraudAlert(
             UUID.randomUUID().toString(),
-            null,
+            accountId,
             "HIGH",
             "EMPTYING_ACCOUNT",
-            null,
+            userId,
             description,
             System.currentTimeMillis()
         );
     }
 
-    public static FraudAlert parallelLogin(String description) {
+    public static FraudAlert parallelLogin(String userId, String description) {
         return new FraudAlert(
             UUID.randomUUID().toString(),
-            null,
+            userId,
             "HIGH",
             "PARALLEL_LOGIN",
-            null,
+            userId,
             description,
             System.currentTimeMillis()
         );
@@ -177,13 +177,13 @@ public class FraudAlert {
         );
     }
 
-    public static FraudAlert underObservation(String description) {
+    public static FraudAlert underObservation(String accountId, String userId, String description) {
         return new FraudAlert(
             UUID.randomUUID().toString(),
-            null,
+            accountId,
             "LOW",
             "UNDER_OBSERVATION",
-            null,
+            userId,
             description,
             System.currentTimeMillis()
         );

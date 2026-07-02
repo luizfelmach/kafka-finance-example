@@ -49,6 +49,9 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "streams" "Start Kafka Streams FraudDetectionApp"
 	@printf "  \033[36m%-14s\033[0m %s\n" "listen-alerts" "Listen to fraud.events topic for alerts"
 	@echo ""
+	@echo "Spring Boot (Fase 5 - Backend)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "spring-boot" "Start Spring Boot backend (port 8080)"
+	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "topics" "Create the 3 required Kafka topics (3 partitions, RF=3)"
 	@printf "  \033[36m%-14s\033[0m %s\n" "topics-view" "List all Kafka topics"
@@ -97,6 +100,10 @@ streams: build ## Start Kafka Streams FraudDetectionApp (all 9 topologies)
 listen-alerts: ## Listen to fraud.events topic for alerts
 	@echo "→ Listening to fraud.events..."
 	docker exec -it kafka-1 /opt/kafka/bin/kafka-console-consumer.sh --topic fraud.events --bootstrap-server localhost:9092 --from-beginning
+
+spring-boot: build ## Start Spring Boot backend (port 8080)
+	@echo "→ Starting Spring Boot application..."
+	java -cp $(JAVA_JAR) com.frauddetection.web.FraudDetectionApplication
 
 topics: ## Create the 4 required Kafka topics (transactions.raw, auth.events, fraud.events 3p/RF=3, clients.profiles 1p/compact)
 	@echo "→ Creating Kafka topics..."
@@ -219,4 +226,4 @@ tmux-kill: ## Kill all tmux sessions (fraud-detection, fraud-scaled)
 	-tmux kill-session -t fraud-detection 2>/dev/null
 	-tmux kill-session -t fraud-scaled 2>/dev/null
 
-.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account streams listen-alerts tmux tmux-scaled tmux-kill
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account streams listen-alerts spring-boot tmux tmux-scaled tmux-kill

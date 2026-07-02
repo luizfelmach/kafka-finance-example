@@ -4,29 +4,48 @@ import com.frauddetection.config.KafkaConfig;
 import com.frauddetection.model.FraudAlert;
 import com.frauddetection.model.TransactionEvent;
 import com.frauddetection.serialization.JsonSerdes;
+import java.math.BigDecimal;
+import java.time.Duration;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Grouped;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
-
-import java.math.BigDecimal;
+import org.apache.kafka.streams.kstream.SlidingWindows;
 
 public class EmptyingAccountTopology {
+
+    private static final Duration WINDOW_SIZE = Duration.ofMinutes(10);
+    private static final Duration GRACE_PERIOD = Duration.ofMinutes(2);
+    private static final BigDecimal MIN_NEGATIVE_BALANCE = new BigDecimal("-1000");
+    private static final long MIN_COUNT = 3;
 
     public static void build(StreamsBuilder builder) {
         builder
             .stream(KafkaConfig.TOPIC_TRANSACTIONS_RAW, Consumed.with(Serdes.String(), JsonSerdes.transactionEvent()))
             .groupByKey(Grouped.with(Serdes.String(), JsonSerdes.transactionEvent()))
+            .windowedBy(SlidingWindows.ofTimeDifferenceAndGrace(WINDOW_SIZE, GRACE_PERIOD))
             .aggregate(
-                () -> BigDecimal.ZERO,
-                (key, tx, balance) -> balance.subtract(BigDecimal.valueOf(tx.getAmount())),
-                Materialized.with(Serdes.String(), JsonSerdes.bigDecimal())
+                AccountAggregate::new,
+                (key, tx, agg) -> agg.add(tx),
+                Materialized.with(Serdes.String(), JsonSerdes.accountAggregate())
             )
             .toStream()
-            .filter((key, balance) -> balance.compareTo(BigDecimal.ZERO) < 0)
-            .mapValues(balance -> FraudAlert.emptyingAccount("Account drained. Balance: " + balance))
+            .filter((windowedKey, agg) ->
+                agg.getTotalAmount().compareTo(MIN_NEGATIVE_BALANCE) < 0
+                && agg.getCount() >= MIN_COUNT
+            )
+            .map((windowedKey, agg) -> KeyValue.pair(
+                windowedKey.key(),
+                FraudAlert.emptyingAccount(
+                    agg.getLastAccountId(),
+                    agg.getLastUserId(),
+                    "Account drained. Balance: " + agg.getTotalAmount()
+                    + " in " + agg.getCount() + " transactions"
+                )
+            ))
             .to(KafkaConfig.TOPIC_FRAUD_EVENTS, Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
     }
 }
