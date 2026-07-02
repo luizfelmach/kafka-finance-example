@@ -29,7 +29,10 @@ public class ClientLoader {
                     devices.add(dev.asText());
                 }
 
-                clients.add(new ClientProfile(userId, accounts, devices, homeIp));
+                double homeLatitude = node.has("home_latitude") ? node.get("home_latitude").asDouble() : 0.0;
+                double homeLongitude = node.has("home_longitude") ? node.get("home_longitude").asDouble() : 0.0;
+
+                clients.add(new ClientProfile(userId, accounts, devices, homeIp, homeLatitude, homeLongitude));
             }
         } catch (IOException e) {
             System.err.println("Failed to load clients: " + e.getMessage());

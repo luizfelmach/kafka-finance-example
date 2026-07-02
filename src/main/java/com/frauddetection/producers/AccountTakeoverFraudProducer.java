@@ -31,13 +31,19 @@ public class AccountTakeoverFraudProducer {
 
         System.out.println("Starting simulation for user: " + userId);
 
+        double lat = Math.round((-5.0 - RANDOM.nextDouble() * 25.0) * 100.0) / 100.0;
+        double lng = Math.round((-35.0 - RANDOM.nextDouble() * 20.0) * 100.0) / 100.0;
+
         // First step -> The thief logs in from an unknown device
         AuthEvent login = new AuthEvent(
                 "auth-" + UUID.randomUUID().toString().substring(0, 8),
                 userId,
                 "login",
                 UNKNOWN_DEVICE,
-                "1.2.3.4");
+                "1.2.3.4",
+                lat,
+                lng,
+                System.currentTimeMillis());
         authProducer.send(new ProducerRecord<>(KafkaConfig.TOPIC_AUTH_EVENTS, userId, login));
         System.out.println("Sent: Unknown device login");
 
@@ -50,7 +56,10 @@ public class AccountTakeoverFraudProducer {
                 userId,
                 "password_change",
                 UNKNOWN_DEVICE,
-                "1.2.3.4");
+                "1.2.3.4",
+                lat,
+                lng,
+                System.currentTimeMillis());
         authProducer.send(new ProducerRecord<>(KafkaConfig.TOPIC_AUTH_EVENTS, userId, pwChange));
         System.out.println("Sent: Password change");
 
@@ -65,7 +74,8 @@ public class AccountTakeoverFraudProducer {
                 5500.0,
                 UNKNOWN_DEVICE,
                 "1.2.3.4",
-                "account-DEST-123");
+                "account-DEST-123",
+                System.currentTimeMillis());
         txProducer.send(new ProducerRecord<>(KafkaConfig.TOPIC_TRANSACTIONS_RAW, userId, tx));
         System.out.println("Sent: High value transaction (R$ 5500.00)");
 

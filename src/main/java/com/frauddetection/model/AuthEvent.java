@@ -9,6 +9,9 @@ public class AuthEvent {
     private String eventType;
     private String deviceId;
     private String ipAddress;
+    private double latitude;
+    private double longitude;
+    private long timestamp;
 
     public AuthEvent() {}
 
@@ -17,13 +20,19 @@ public class AuthEvent {
         String userId,
         String eventType,
         String deviceId,
-        String ipAddress
+        String ipAddress,
+        double latitude,
+        double longitude,
+        long timestamp
     ) {
         this.eventId = eventId;
         this.userId = userId;
         this.eventType = eventType;
         this.deviceId = deviceId;
         this.ipAddress = ipAddress;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.timestamp = timestamp;
     }
 
     public String getEventId() {
@@ -66,25 +75,42 @@ public class AuthEvent {
         this.ipAddress = ipAddress;
     }
 
+    public double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(double latitude) {
+        this.latitude = latitude;
+    }
+
+    public double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(double longitude) {
+        this.longitude = longitude;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
     @Override
     public String toString() {
         return (
             "AuthEvent{" +
-            "eventId='" +
-            eventId +
-            '\'' +
-            ", userId='" +
-            userId +
-            '\'' +
-            ", eventType='" +
-            eventType +
-            '\'' +
-            ", deviceId='" +
-            deviceId +
-            '\'' +
-            ", ipAddress='" +
-            ipAddress +
-            '\'' +
+            "eventId='" + eventId + '\'' +
+            ", userId='" + userId + '\'' +
+            ", eventType='" + eventType + '\'' +
+            ", deviceId='" + deviceId + '\'' +
+            ", ipAddress='" + ipAddress + '\'' +
+            ", latitude=" + latitude +
+            ", longitude=" + longitude +
+            ", timestamp=" + timestamp +
             '}'
         );
     }
@@ -95,6 +121,9 @@ public class AuthEvent {
         if (o == null || getClass() != o.getClass()) return false;
         AuthEvent authEvent = (AuthEvent) o;
         return (
+            Double.compare(authEvent.latitude, latitude) == 0 &&
+            Double.compare(authEvent.longitude, longitude) == 0 &&
+            timestamp == authEvent.timestamp &&
             Objects.equals(eventId, authEvent.eventId) &&
             Objects.equals(userId, authEvent.userId) &&
             Objects.equals(eventType, authEvent.eventType) &&
@@ -105,6 +134,6 @@ public class AuthEvent {
 
     @Override
     public int hashCode() {
-        return Objects.hash(eventId, userId, eventType, deviceId, ipAddress);
+        return Objects.hash(eventId, userId, eventType, deviceId, ipAddress, latitude, longitude, timestamp);
     }
 }

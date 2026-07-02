@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -85,7 +86,7 @@ public class EmptyingAccountConsumerProducer {
                     times.size(), HIGH_VALUE_THRESHOLD
                 );
                 
-                FraudAlert alert = new FraudAlert("EMPTYING_ACCOUNT", userId, desc, now);
+                FraudAlert alert = new FraudAlert("alert-" + UUID.randomUUID().toString().substring(0, 8), tx.getAccountId(), "HIGH", "EMPTYING_ACCOUNT", userId, desc, now);
                 producer.send(new ProducerRecord<>(KafkaConfig.TOPIC_FRAUD_EVENTS, userId, alert));
 
                 System.out.printf("[ALERT] EMPTYING_ACCOUNT | user=%s | count=%d | last_amount=R$%.2f%n", 

@@ -6,5 +6,7 @@ public record ClientProfile(
     String userId,
     List<String> accounts,
     List<String> trustedDevices,
-    String homeIp
+    String homeIp,
+    double homeLatitude,
+    double homeLongitude
 ) {}

@@ -51,7 +51,8 @@ public class BurstTransactionFraudProducer {
                 amount,
                 deviceId,
                 client.homeIp(),
-                destinationAccount
+                destinationAccount,
+                System.currentTimeMillis()
             );
 
             producer.send(

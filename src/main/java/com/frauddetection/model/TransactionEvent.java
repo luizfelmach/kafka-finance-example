@@ -12,6 +12,7 @@ public class TransactionEvent {
     private String deviceId;
     private String ipAddress;
     private String destinationAccount;
+    private long timestamp;
 
     public TransactionEvent() {}
 
@@ -23,7 +24,8 @@ public class TransactionEvent {
         double amount,
         String deviceId,
         String ipAddress,
-        String destinationAccount
+        String destinationAccount,
+        long timestamp
     ) {
         this.transactionId = transactionId;
         this.accountId = accountId;
@@ -33,6 +35,7 @@ public class TransactionEvent {
         this.deviceId = deviceId;
         this.ipAddress = ipAddress;
         this.destinationAccount = destinationAccount;
+        this.timestamp = timestamp;
     }
 
     public String getTransactionId() {
@@ -99,33 +102,27 @@ public class TransactionEvent {
         this.destinationAccount = destinationAccount;
     }
 
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
     @Override
     public String toString() {
         return (
             "TransactionEvent{" +
-            "transactionId='" +
-            transactionId +
-            '\'' +
-            ", accountId='" +
-            accountId +
-            '\'' +
-            ", userId='" +
-            userId +
-            '\'' +
-            ", type='" +
-            type +
-            '\'' +
-            ", amount=" +
-            amount +
-            ", deviceId='" +
-            deviceId +
-            '\'' +
-            ", ipAddress='" +
-            ipAddress +
-            '\'' +
-            ", destinationAccount='" +
-            destinationAccount +
-            '\'' +
+            "transactionId='" + transactionId + '\'' +
+            ", accountId='" + accountId + '\'' +
+            ", userId='" + userId + '\'' +
+            ", type='" + type + '\'' +
+            ", amount=" + amount +
+            ", deviceId='" + deviceId + '\'' +
+            ", ipAddress='" + ipAddress + '\'' +
+            ", destinationAccount='" + destinationAccount + '\'' +
+            ", timestamp=" + timestamp +
             '}'
         );
     }
@@ -137,6 +134,7 @@ public class TransactionEvent {
         TransactionEvent that = (TransactionEvent) o;
         return (
             Double.compare(that.amount, amount) == 0 &&
+            timestamp == that.timestamp &&
             Objects.equals(transactionId, that.transactionId) &&
             Objects.equals(accountId, that.accountId) &&
             Objects.equals(userId, that.userId) &&
@@ -157,7 +155,8 @@ public class TransactionEvent {
             amount,
             deviceId,
             ipAddress,
-            destinationAccount
+            destinationAccount,
+            timestamp
         );
     }
 }

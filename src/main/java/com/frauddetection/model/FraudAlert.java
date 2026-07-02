@@ -3,6 +3,9 @@ package com.frauddetection.model;
 import java.util.Objects;
 
 public class FraudAlert {
+    private String alertId;
+    private String accountId;
+    private String severity;
     private String alertType;
     private String userId;
     private String description;
@@ -10,11 +13,38 @@ public class FraudAlert {
 
     public FraudAlert() {}
 
-    public FraudAlert(String alertType, String userId, String description, long timestamp) {
+    public FraudAlert(String alertId, String accountId, String severity, String alertType, String userId, String description, long timestamp) {
+        this.alertId = alertId;
+        this.accountId = accountId;
+        this.severity = severity;
         this.alertType = alertType;
         this.userId = userId;
         this.description = description;
         this.timestamp = timestamp;
+    }
+
+    public String getAlertId() {
+        return alertId;
+    }
+
+    public void setAlertId(String alertId) {
+        this.alertId = alertId;
+    }
+
+    public String getAccountId() {
+        return accountId;
+    }
+
+    public void setAccountId(String accountId) {
+        this.accountId = accountId;
+    }
+
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
     }
 
     public String getAlertType() {
@@ -52,7 +82,10 @@ public class FraudAlert {
     @Override
     public String toString() {
         return "FraudAlert{" +
-                "alertType='" + alertType + '\'' +
+                "alertId='" + alertId + '\'' +
+                ", accountId='" + accountId + '\'' +
+                ", severity='" + severity + '\'' +
+                ", alertType='" + alertType + '\'' +
                 ", userId='" + userId + '\'' +
                 ", description='" + description + '\'' +
                 ", timestamp=" + timestamp +
@@ -65,6 +98,9 @@ public class FraudAlert {
         if (o == null || getClass() != o.getClass()) return false;
         FraudAlert that = (FraudAlert) o;
         return timestamp == that.timestamp &&
+                Objects.equals(alertId, that.alertId) &&
+                Objects.equals(accountId, that.accountId) &&
+                Objects.equals(severity, that.severity) &&
                 Objects.equals(alertType, that.alertType) &&
                 Objects.equals(userId, that.userId) &&
                 Objects.equals(description, that.description);
@@ -72,6 +108,6 @@ public class FraudAlert {
 
     @Override
     public int hashCode() {
-        return Objects.hash(alertType, userId, description, timestamp);
+        return Objects.hash(alertId, accountId, severity, alertType, userId, description, timestamp);
     }
 }

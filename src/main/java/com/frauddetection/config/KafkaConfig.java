@@ -15,6 +15,7 @@ public class KafkaConfig {
     public static final String TOPIC_TRANSACTIONS_RAW = "transactions.raw";
     public static final String TOPIC_AUTH_EVENTS = "auth.events";
     public static final String TOPIC_FRAUD_EVENTS = "fraud.events";
+    public static final String TOPIC_CLIENTS_PROFILES = "clients.profiles";
 
     public static Properties producerProps() {
         Properties props = new Properties();
@@ -25,7 +26,7 @@ public class KafkaConfig {
         props.put(
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
                 JsonSerializer.class.getName());
-        props.put(ProducerConfig.ACKS_CONFIG, "1");
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
         return props;
     }
 

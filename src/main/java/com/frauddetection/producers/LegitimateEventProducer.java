@@ -7,7 +7,6 @@ import com.frauddetection.model.AuthEvent;
 import com.frauddetection.model.TransactionEvent;
 import java.io.File;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -127,6 +126,8 @@ public class LegitimateEventProducer {
             for (JsonNode node : clientsNode) {
                 String userId = node.get("user_id").asText();
                 String homeIp = node.get("home_ip").asText();
+                double homeLatitude = node.has("home_latitude") ? node.get("home_latitude").asDouble() : 0.0;
+                double homeLongitude = node.has("home_longitude") ? node.get("home_longitude").asDouble() : 0.0;
 
                 List<String> accounts = new ArrayList<>();
                 for (JsonNode acc : node.get("accounts")) {
@@ -138,7 +139,7 @@ public class LegitimateEventProducer {
                     devices.add(dev.asText());
                 }
 
-                clients.add(new ClientData(userId, accounts, devices, homeIp));
+                clients.add(new ClientData(userId, accounts, devices, homeIp, homeLatitude, homeLongitude));
             }
         } catch (IOException e) {
             System.err.println("Failed to load clients: " + e.getMessage());
@@ -173,7 +174,8 @@ public class LegitimateEventProducer {
             amount,
             deviceId,
             client.homeIp,
-            destinationAccount
+            destinationAccount,
+            System.currentTimeMillis()
         );
     }
 
@@ -185,7 +187,10 @@ public class LegitimateEventProducer {
             client.userId,
             "login",
             deviceId,
-            client.homeIp
+            client.homeIp,
+            client.homeLatitude,
+            client.homeLongitude,
+            System.currentTimeMillis()
         );
     }
 
@@ -208,6 +213,8 @@ public class LegitimateEventProducer {
         String userId,
         List<String> accounts,
         List<String> trustedDevices,
-        String homeIp
+        String homeIp,
+        double homeLatitude,
+        double homeLongitude
     ) {}
 }

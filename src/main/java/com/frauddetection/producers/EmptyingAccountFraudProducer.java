@@ -50,7 +50,8 @@ public class EmptyingAccountFraudProducer {
                     amount,
                     deviceId,
                     client.homeIp(),
-                    destinationAccount);
+                    destinationAccount,
+                    System.currentTimeMillis());
 
             producer.send(
                     new ProducerRecord<>(

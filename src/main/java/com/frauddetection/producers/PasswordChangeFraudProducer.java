@@ -40,7 +40,10 @@ public class PasswordChangeFraudProducer {
             client.userId(),
             "password_change",
             deviceId,
-            client.homeIp()
+            client.homeIp(),
+            client.homeLatitude(),
+            client.homeLongitude(),
+            System.currentTimeMillis()
         );
         authProducer.send(
             new ProducerRecord<>(
@@ -69,7 +72,10 @@ public class PasswordChangeFraudProducer {
             client.userId(),
             "login",
             deviceId,
-            client.homeIp()
+            client.homeIp(),
+            client.homeLatitude(),
+            client.homeLongitude(),
+            System.currentTimeMillis()
         );
         authProducer.send(
             new ProducerRecord<>(
@@ -108,7 +114,8 @@ public class PasswordChangeFraudProducer {
             amount,
             deviceId,
             client.homeIp(),
-            destinationAccount
+            destinationAccount,
+            System.currentTimeMillis()
         );
 
         txProducer.send(

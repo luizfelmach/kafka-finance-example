@@ -35,12 +35,17 @@ public class UnknownDeviceFraudProducer {
 
         // Step 1: login from unknown device
         String authId = "auth-" + UUID.randomUUID().toString().substring(0, 8);
+        double lat = Math.round((-5.0 - RANDOM.nextDouble() * 25.0) * 100.0) / 100.0;
+        double lng = Math.round((-35.0 - RANDOM.nextDouble() * 20.0) * 100.0) / 100.0;
         AuthEvent auth = new AuthEvent(
             authId,
             client.userId(),
             "login",
             UNKNOWN_DEVICE,
-            client.homeIp()
+            client.homeIp(),
+            lat,
+            lng,
+            System.currentTimeMillis()
         );
         authProducer.send(
             new ProducerRecord<>(
@@ -79,7 +84,8 @@ public class UnknownDeviceFraudProducer {
             amount,
             UNKNOWN_DEVICE,
             client.homeIp(),
-            destinationAccount
+            destinationAccount,
+            System.currentTimeMillis()
         );
 
         txProducer.send(
