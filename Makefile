@@ -45,6 +45,10 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-scaled" "Launch N consumer instances in tmux (CONSUMER=high-amount|burst|unknown-device|password-change|account-takeover|emptying-account, SCALE=N)"
 	@printf "  \033[36m%-14s\033[0m %s\n" "tmux-kill" "Kill the tmux session"
 	@echo ""
+	@echo "Streams (Fase 4 - Kafka Streams Detection)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "streams" "Start Kafka Streams FraudDetectionApp"
+	@printf "  \033[36m%-14s\033[0m %s\n" "listen-alerts" "Listen to fraud.events topic for alerts"
+	@echo ""
 	@echo "Kafka"
 	@printf "  \033[36m%-14s\033[0m %s\n" "topics" "Create the 3 required Kafka topics (3 partitions, RF=3)"
 	@printf "  \033[36m%-14s\033[0m %s\n" "topics-view" "List all Kafka topics"
@@ -67,7 +71,7 @@ restart: ## Restart all services (recreates containers to pick up new env vars)
 	docker compose -f $(COMPOSE_FILE) up -d --force-recreate
 	@echo "✓ Services restarted"
 
-build: ## Build project JAR with Maven
+build: clean ## Build project JAR with Maven
 	@echo "→ Building project JAR..."
 	mvn -q -DskipTests package
 	@echo "✓ Build complete"
@@ -85,6 +89,14 @@ clients: build ## Generate clients.json with simulated client metadata
 simulate: build ## Run LegitimateEventProducer
 	@echo "→ Running LegitimateEventProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.LegitimateEventProducer
+
+streams: build ## Start Kafka Streams FraudDetectionApp (all 9 topologies)
+	@echo "→ Starting FraudDetectionApp (Kafka Streams)..."
+	java -cp $(JAVA_JAR) com.frauddetection.streams.FraudDetectionApp
+
+listen-alerts: ## Listen to fraud.events topic for alerts
+	@echo "→ Listening to fraud.events..."
+	docker exec -it kafka-1 /opt/kafka/bin/kafka-console-consumer.sh --topic fraud.events --bootstrap-server localhost:9092 --from-beginning
 
 topics: ## Create the 4 required Kafka topics (transactions.raw, auth.events, fraud.events 3p/RF=3, clients.profiles 1p/compact)
 	@echo "→ Creating Kafka topics..."
@@ -207,4 +219,4 @@ tmux-kill: ## Kill all tmux sessions (fraud-detection, fraud-scaled)
 	-tmux kill-session -t fraud-detection 2>/dev/null
 	-tmux kill-session -t fraud-scaled 2>/dev/null
 
-.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account tmux tmux-scaled tmux-kill
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account streams listen-alerts tmux tmux-scaled tmux-kill

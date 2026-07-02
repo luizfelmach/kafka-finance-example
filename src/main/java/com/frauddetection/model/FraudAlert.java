@@ -1,6 +1,8 @@
 package com.frauddetection.model;
 
+import java.math.BigDecimal;
 import java.util.Objects;
+import java.util.UUID;
 
 public class FraudAlert {
     private String alertId;
@@ -77,6 +79,114 @@ public class FraudAlert {
 
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public static FraudAlert highValue(TransactionEvent tx) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            tx.getAccountId(),
+            "HIGH",
+            "HIGH_VALUE_TRANSACTION",
+            tx.getUserId(),
+            "Transaction of R$" + String.format("%.2f", tx.getAmount()) + " exceeds high-value threshold",
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert transactionBurst(String accountId, long count, long windowStart, long windowEnd) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            accountId,
+            "MEDIUM",
+            "TRANSACTION_BURST",
+            null,
+            count + " transactions in 5-minute window",
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert unknownDevice(AuthEvent auth) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            auth.getUserId(),
+            "MEDIUM",
+            "UNKNOWN_DEVICE",
+            auth.getUserId(),
+            "Login from unknown device: " + auth.getDeviceId(),
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert passwordChange(AuthEvent auth) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            auth.getUserId(),
+            "HIGH",
+            "PASSWORD_CHANGE",
+            auth.getUserId(),
+            "Password changed by user " + auth.getUserId(),
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert accountTakeover(AuthEvent auth) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            auth.getUserId(),
+            "CRITICAL",
+            "ACCOUNT_TAKEOVER",
+            auth.getUserId(),
+            "Password change after " + auth.getRecentFailedAttempts() + " failed attempts",
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert emptyingAccount(String description) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            null,
+            "HIGH",
+            "EMPTYING_ACCOUNT",
+            null,
+            description,
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert parallelLogin(String description) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            null,
+            "HIGH",
+            "PARALLEL_LOGIN",
+            null,
+            description,
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert farawayLogin(AuthEvent auth, double distance, double speedKmh) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            auth.getUserId(),
+            "HIGH",
+            "FARAWAY_LOGIN",
+            auth.getUserId(),
+            String.format("Impossible travel: %.0f km at %.0f km/h", distance / 1000, speedKmh),
+            System.currentTimeMillis()
+        );
+    }
+
+    public static FraudAlert underObservation(String description) {
+        return new FraudAlert(
+            UUID.randomUUID().toString(),
+            null,
+            "LOW",
+            "UNDER_OBSERVATION",
+            null,
+            description,
+            System.currentTimeMillis()
+        );
     }
 
     @Override
