@@ -31,6 +31,9 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "password-change" "Simulate password change fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "account-takeover" "Simulate account takeover fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "emptying-account" "Simulate emptying account fraud"
+	@printf "  \033[36m%-14s\033[0m %s\n" "parallel-login" "Simulate parallel login fraud (SP + Recife)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "faraway-login" "Simulate faraway login fraud (SP + Tokyo)"
+	@printf "  \033[36m%-14s\033[0m %s\n" "under-observation" "Simulate under observation detection"
 	@echo ""
 	@echo "Fraud Consumers"
 	@printf "  \033[36m%-14s\033[0m %s\n" "detect-high-amount" "Detect high amount fraud"
@@ -153,6 +156,18 @@ emptying-account: build ## Simulate emptying account fraud (combine multiple fra
 	@echo "→ Running EmptyingAccountFraudProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.producers.EmptyingAccountFraudProducer
 
+parallel-login: build ## Simulate parallel login fraud (SP + Recife)
+	@echo "→ Running ParallelLoginFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.ParallelLoginFraudProducer
+
+faraway-login: build ## Simulate faraway login fraud (SP + Tokyo)
+	@echo "→ Running FarawayLoginFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.FarawayLoginFraudProducer
+
+under-observation: build ## Simulate under observation detection
+	@echo "→ Running UnderObservationFraudProducer..."
+	java -cp $(JAVA_JAR) com.frauddetection.producers.UnderObservationFraudProducer
+
 detect-high-amount: build ## Detect high amount fraud
 	@echo "→ Running HighAmountConsumer..."
 	java -cp $(JAVA_JAR) com.frauddetection.consumers.HighAmountConsumer
@@ -226,4 +241,4 @@ tmux-kill: ## Kill all tmux sessions (fraud-detection, fraud-scaled)
 	-tmux kill-session -t fraud-detection 2>/dev/null
 	-tmux kill-session -t fraud-scaled 2>/dev/null
 
-.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account streams listen-alerts spring-boot tmux tmux-scaled tmux-kill
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account parallel-login faraway-login under-observation detect-high-amount detect-burst detect-unknown-device detect-password-change detect-account-takeover detect-emptying-account streams listen-alerts spring-boot tmux tmux-scaled tmux-kill
