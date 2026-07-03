@@ -12,10 +12,16 @@ public class FraudAlert {
     private String userId;
     private String description;
     private long timestamp;
+    private Double latitude;
+    private Double longitude;
 
     public FraudAlert() {}
 
     public FraudAlert(String alertId, String accountId, String severity, String alertType, String userId, String description, long timestamp) {
+        this(alertId, accountId, severity, alertType, userId, description, timestamp, null, null);
+    }
+
+    public FraudAlert(String alertId, String accountId, String severity, String alertType, String userId, String description, long timestamp, Double latitude, Double longitude) {
         this.alertId = alertId;
         this.accountId = accountId;
         this.severity = severity;
@@ -23,6 +29,8 @@ public class FraudAlert {
         this.userId = userId;
         this.description = description;
         this.timestamp = timestamp;
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 
     public String getAlertId() {
@@ -81,6 +89,11 @@ public class FraudAlert {
         this.timestamp = timestamp;
     }
 
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+
     public static FraudAlert highValue(TransactionEvent tx) {
         return new FraudAlert(
             UUID.randomUUID().toString(),
@@ -113,7 +126,9 @@ public class FraudAlert {
             "UNKNOWN_DEVICE",
             auth.getUserId(),
             "Login from unknown device: " + auth.getDeviceId(),
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            auth.getLatitude(),
+            auth.getLongitude()
         );
     }
 
@@ -125,7 +140,9 @@ public class FraudAlert {
             "PASSWORD_CHANGE",
             auth.getUserId(),
             "Password changed by user " + auth.getUserId(),
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            auth.getLatitude(),
+            auth.getLongitude()
         );
     }
 
@@ -137,7 +154,9 @@ public class FraudAlert {
             "ACCOUNT_TAKEOVER",
             auth.getUserId(),
             "Password change after " + auth.getRecentFailedAttempts() + " failed attempts",
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            auth.getLatitude(),
+            auth.getLongitude()
         );
     }
 
@@ -173,7 +192,9 @@ public class FraudAlert {
             "FARAWAY_LOGIN",
             auth.getUserId(),
             String.format("Impossible travel: %.0f km at %.0f km/h", distance / 1000, speedKmh),
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            auth.getLatitude(),
+            auth.getLongitude()
         );
     }
 
@@ -199,6 +220,8 @@ public class FraudAlert {
                 ", userId='" + userId + '\'' +
                 ", description='" + description + '\'' +
                 ", timestamp=" + timestamp +
+                ", latitude=" + latitude +
+                ", longitude=" + longitude +
                 '}';
     }
 
@@ -213,11 +236,13 @@ public class FraudAlert {
                 Objects.equals(severity, that.severity) &&
                 Objects.equals(alertType, that.alertType) &&
                 Objects.equals(userId, that.userId) &&
-                Objects.equals(description, that.description);
+                Objects.equals(description, that.description) &&
+                Objects.equals(latitude, that.latitude) &&
+                Objects.equals(longitude, that.longitude);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(alertId, accountId, severity, alertType, userId, description, timestamp);
+        return Objects.hash(alertId, accountId, severity, alertType, userId, description, timestamp, latitude, longitude);
     }
 }
