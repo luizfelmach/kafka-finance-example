@@ -1,19 +1,22 @@
 package com.frauddetection.streams;
 
-import com.frauddetection.config.KafkaConfig;
-import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.KafkaStreams;
+
+import java.util.List;
 
 public class FraudDetectionTopology {
 
-    public static void build(StreamsBuilder builder) {
-        HighAmountTopology.build(builder);
-        BurstTopology.build(builder);
-        UnknownDeviceTopology.build(builder);
-        PasswordChangeTopology.build(builder);
-        AccountTakeoverTopology.build(builder);
-        EmptyingAccountTopology.build(builder);
-        ParallelLoginTopology.build(builder);
-        FarawayLoginTopology.build(builder);
-        UnderObservationTopology.build(builder);
+    public static List<KafkaStreams> buildAll() {
+        return List.of(
+            HighAmountTopology.build(),
+            BurstTopology.build(),
+            UnknownDeviceTopology.build(),
+            PasswordChangeTopology.build(),
+            AccountTakeoverTopology.build(),
+            EmptyingAccountTopology.build(),
+            ParallelLoginTopology.build(),
+            FarawayLoginTopology.build(),
+            UnderObservationTopology.build()
+        );
     }
 }

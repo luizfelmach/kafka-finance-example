@@ -42,6 +42,9 @@ public class KafkaConfig {
         props.put(StreamsConfig.STATE_DIR_CONFIG, "/tmp/kafka-streams");
         props.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
         props.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 10 * 1024 * 1024L);
+        props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, 3);
+        props.put(StreamsConfig.producerPrefix(ProducerConfig.ACKS_CONFIG), "all");
+        props.put(StreamsConfig.producerPrefix(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG), true);
         return props;
     }
 

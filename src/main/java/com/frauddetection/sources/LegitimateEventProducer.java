@@ -1,4 +1,4 @@
-package com.frauddetection.producers;
+package com.frauddetection.sources;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

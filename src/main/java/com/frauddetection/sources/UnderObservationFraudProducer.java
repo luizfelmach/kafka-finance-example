@@ -1,4 +1,4 @@
-package com.frauddetection.producers;
+package com.frauddetection.sources;
 
 import com.frauddetection.config.KafkaConfig;
 import com.frauddetection.model.TransactionEvent;

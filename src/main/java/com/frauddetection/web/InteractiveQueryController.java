@@ -1,14 +1,8 @@
 package com.frauddetection.web;
 
 import com.frauddetection.streams.LastLogin;
+import com.frauddetection.streams.StreamsManager;
 import com.frauddetection.streams.TxHistory;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.StoreQueryParameters;
-import org.apache.kafka.streams.state.QueryableStoreTypes;
-import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,33 +10,31 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @CrossOrigin
 @RequestMapping("/api/queries")
 public class InteractiveQueryController {
 
     @Autowired
-    private KafkaStreams kafkaStreams;
+    private StreamsManager streamsManager;
 
     @GetMapping("/faraway-logins/{userId}")
     public LastLogin getFarawayLogin(@PathVariable String userId) {
-        ReadOnlyKeyValueStore<String, LastLogin> store = kafkaStreams.store(
-                StoreQueryParameters.fromNameAndType(
-                        "last-login-store",
-                        QueryableStoreTypes.keyValueStore()));
+        var store = streamsManager.<LastLogin>getStore("last-login-store");
         return store.get(userId);
     }
 
     @GetMapping("/observations")
     public List<Map<String, Object>> getObservations() {
-        ReadOnlyKeyValueStore<String, TxHistory> store = kafkaStreams.store(
-                StoreQueryParameters.fromNameAndType(
-                        "observation-store",
-                        QueryableStoreTypes.keyValueStore()));
+        var store = streamsManager.<TxHistory>getStore("observation-store");
         List<Map<String, Object>> result = new ArrayList<>();
         try (var iter = store.all()) {
             iter.forEachRemaining(entry -> {
-                if (entry.value.size() >= 3) {
+                if (entry.value.size() >= 5) {
                     result.add(Map.of(
                             "userId", entry.key,
                             "txCount", entry.value.size(),

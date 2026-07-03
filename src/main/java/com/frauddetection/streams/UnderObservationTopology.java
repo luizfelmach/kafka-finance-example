@@ -4,6 +4,7 @@ import com.frauddetection.config.KafkaConfig;
 import com.frauddetection.model.FraudAlert;
 import com.frauddetection.serialization.JsonSerdes;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.Consumed;
@@ -13,7 +14,8 @@ import org.apache.kafka.streams.state.Stores;
 
 public class UnderObservationTopology {
 
-    public static void build(StreamsBuilder builder) {
+    public static KafkaStreams build() {
+        StreamsBuilder builder = new StreamsBuilder();
         builder
             .stream(KafkaConfig.TOPIC_TRANSACTIONS_RAW, Consumed.with(Serdes.String(), JsonSerdes.transactionEvent()))
             .groupByKey()
@@ -40,5 +42,9 @@ public class UnderObservationTopology {
                     "90%+ of recent activity concentrated in last 5 transactions")
             ))
             .to(KafkaConfig.TOPIC_FRAUD_EVENTS, Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
+
+        KafkaStreams streams = new KafkaStreams(builder.build(), KafkaConfig.streamsProps("fraud-detection-under-observation"));
+        streams.start();
+        return streams;
     }
 }
