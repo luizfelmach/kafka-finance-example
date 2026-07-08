@@ -1,149 +1,154 @@
-# Kafka Finance Example — Sistema de Detecção de Fraudes
+# Kafka Finance Example — Fraud Detection System
 
-Sistema de detecção de fraudes financeiras em tempo real utilizando **Apache Kafka** como plataforma de streaming de eventos e **Kafka Streams** como motor de processamento CEP (Complex Event Processing). O projeto simula transações bancárias, eventos de autenticação e detecta padrões suspeitos através de topologias Kafka Streams com Álgebra de Allen, janelamento temporal e agregações com estado.
-
----
-
-## Sumário
-
-- [Visão Geral](#visão-geral)
-- [Arquitetura](#arquitetura)
-- [Tecnologias](#tecnologias)
-- [Pré-requisitos](#pré-requisitos)
-- [Estrutura do Projeto](#estrutura-do-projeto)
-- [Configuração e Execução](#configuração-e-execução)
-- [Comandos Make Disponíveis](#comandos-make-disponíveis)
-- [Tipos de Fraude Detectados](#tipos-de-fraude-detectados)
-- [Tópicos Kafka](#tópicos-kafka)
-- [Modelos de Dados](#modelos-de-dados)
-- [Produtores de Eventos](#produtores-de-eventos)
-- [Etapa 2 — Migração para Kafka Streams e CEP (Plano de Implementação)](#etapa-2-—-migração-para-kafka-streams-e-cep-plano-de-implementação)
-  - [Fase 1: Atualizar Modelos de Dados](#fase-1-atualizar-modelos-de-dados)
-  - [Fase 2: Infraestrutura — pom.xml](#fase-2-infraestrutura---pomxml)
-  - [Fase 3: Serdes para Kafka Streams](#fase-3-serdes-para-kafka-streams)
-  - [Fase 4: Topologias Kafka Streams (9 topologias)](#fase-4-topologias-kafka-streams-9-topologias)
-  - [Fase 5: Back-end Spring Boot](#fase-5-back-end-spring-boot)
-  - [Fase 6: Produtores de Teste](#fase-6-produtores-de-teste)
-  - [Fase 7: Makefile — Targets Atualizados](#fase-7-makefile---targets-atualizados)
-  - [Dependências entre Fases](#dependências-entre-fases)
-  - [Conceitos Utilizados](#conceitos-utilizados)
-- [Licença](#licença)
+Real-time financial fraud detection using **Apache Kafka** as the event streaming platform and **Kafka Streams** as the CEP (Complex Event Processing) engine. The project simulates bank transactions and authentication events, detecting suspicious patterns through 9 independent Kafka Streams topologies using temporal windows, Allen's interval algebra, stateful aggregations, and geolocation analysis.
 
 ---
 
-## Visão Geral
+## Table of Contents
 
-Este projeto demonstra um pipeline completo de detecção de fraudes financeiras:
-
-1. **Geração de clientes simulados** — perfis com contas, dispositivos confiáveis, IPs e coordenadas geográficas.
-2. **Produção de eventos legítimos** — transações e autenticações normais.
-3. **Simulação de fraudes** — produtores especializados injetam comportamentos maliciosos.
-4. **Detecção em tempo real com Kafka Streams** — 9 topologias analisam padrões, joins, janelas temporais e relações de Allen, gerando alertas.
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Technologies](#technologies)
+- [Prerequisites](#prerequisites)
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Setup & Execution](#setup--execution)
+- [Make Targets](#make-targets)
+- [Data Models](#data-models)
+- [Topologies](#topologies)
+- [REST API](#rest-api)
+- [Frontend](#frontend)
+- [CLI Sources](#cli-sources)
+- [License](#license)
 
 ---
 
-## Arquitetura
+## Overview
+
+1. **Client profiles** — 100 simulated bank clients with accounts, trusted devices, IPs, and home coordinates.
+2. **Legitimate events** — continuous stream of normal transactions and logins.
+3. **Fraud simulation** — specialized CLI sources inject malicious behaviour (high-value txs, unknown devices, impossible travel, etc.).
+4. **Real-time detection** — 9 independent Kafka Streams topologies analyse patterns using joins, windows, state stores and Allen relations, producing alerts.
+5. **Frontend SPA** — real-time dashboard with Leaflet map, SSE live feed, fraud simulator, and state store queries.
+
+---
+
+## Architecture
 
 ```
-                        PRODUTORES
- ┌─────────────────┐  ┌──────────────────────────────────┐
- │ LegitimateEvent │  │        Fraud Producers            │
- │   Producer      │  │  (7 tipos + 3 de teste)          │
- └────────┬────────┘  └────────┬────────┬────────┬───────┘
-          │                    │        │        │
-          ▼                    ▼        ▼        ▼
+                        CLI SOURCES                          REST API
+ ┌─────────────────┐  ┌──────────────────────────────────┐  ┌─────────────────┐
+ │ LegitimateEvent │  │ Fraud Sources (9 types)           │  │ POST /api/events│
+ │   Producer      │  │ high-amount, burst, unknown-device│  │ /transaction    │
+ └────────┬────────┘  │ password-change, account-takeover,│  │ /auth           │
+          │           │ emptying-account, parallel-login, │  └────────┬────────┘
+          │           │ faraway-login, under-observation  │           │
+          │           └────────┬────────┬────────┬────────┘           │
+          ▼                    ▼        ▼        ▼                    ▼
  ┌──────────────┐   ┌──────────────┐   ┌────────────────┐   ┌──────────────────┐
  │ transactions │   │  auth.events │   │  fraud.events  │   │ clients.profiles │
  │    .raw      │   │              │   │                │   │   (compactado)   │
- │ (3 partições)│   │ (3 partições)│   │ (3 partições)  │   │   (1 partição)   │
- │   RF = 3     │   │   RF = 3     │   │   RF = 3       │   │    RF = 3        │
+ │ (3p / RF=3)  │   │ (3p / RF=3)  │   │ (3p / RF=3)    │   │   (1p / RF=3)    │
  └──────┬───────┘   └──────┬───────┘   └───────┬────────┘   └────────┬─────────┘
         │                  │                   │                     │
         └──────────────────┼───────────────────┼─────────────────────┘
                            ▼                   ▼
-              ┌────────────────────────────────────────────┐
-              │           KAFKA STREYS (9 topologias)       │
-              │                                            │
-              │  ┌──────────┐ ┌──────────┐ ┌───────────┐  │
-              │  │ High     │ │  Burst   │ │  Unknown  │  │
-              │  │ Amount   │ │          │ │  Device   │  │
-              │  └──────────┘ └──────────┘ └───────────┘  │
-              │  ┌──────────┐ ┌──────────┐ ┌───────────┐  │
-              │  │ Password │ │ Account  │ │ Emptying  │  │
-              │  │ Change   │ │ Takeover │ │ Account   │  │
-              │  └──────────┘ └──────────┘ └───────────┘  │
-              │  ┌──────────┐ ┌──────────┐ ┌───────────┐  │
-              │  │ Parallel │ │ Faraway  │ │   Under   │  │
-              │  │  Login   │ │  Login   │ │Obser vation│  │
-              │  └──────────┘ └──────────┘ └───────────┘  │
-              │                                            │
-              │  State Stores (RocksDB) | Interactive Q.   │
-              └────────────────────┬───────────────────────┘
-                                   │
-                                   ▼ (alertas)
-                            ┌──────────────┐
-                            │ fraud.events │
-                            └──────┬───────┘
-                                   │
-                                   ▼
-                         ┌─────────────────────┐
-                         │  BACK-END SPRING BOOT │
-                         │  SSE + REST IQ       │
-                         └─────────────────────┘
+              ┌──────────────────────────────────────────────────────┐
+              │          KAFKA STREAMS (9 independent instances)      │
+              │                                                      │
+              │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+              │  │ HighAmount   │ │ Burst        │ │ UnknownDevice│  │
+              │  │ app.id=...   │ │ app.id=...   │ │ app.id=...   │  │
+              │  │ -high-amount │ │ -burst       │ │ -unknown-dev.│  │
+              │  └──────────────┘ └──────────────┘ └──────────────┘  │
+              │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+              │  │ PasswordChg  │ │ AcctTakeover │ │ EmptyingAcct │  │
+              │  │ app.id=...   │ │ app.id=...   │ │ app.id=...   │  │
+              │  │ -password-c. │ │ -account-t.  │ │ -emptying-a. │  │
+              │  └──────────────┘ └──────────────┘ └──────────────┘  │
+              │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+              │  │ ParallelLogin│ │ FarawayLogin │ │ UnderObs.    │  │
+              │  │ app.id=...   │ │ app.id=...   │ │ app.id=...   │  │
+              │  │ -parallel-l. │ │ -faraway-l.  │ │ -under-obser.│  │
+              │  └──────────────┘ └──────────────┘ └──────────────┘  │
+              │                                                      │
+              │  State Stores: last-login-store, observation-store   │
+              │  Interactive Queries via StreamsManager               │
+              └──────────────────────┬───────────────────────────────┘
+                                     │
+                                     ▼ (alerts)
+                              ┌──────────────┐
+                              │ fraud.events │
+                              └──────┬───────┘
+                                     │
+                           ┌─────────┴─────────┐
+                           ▼                   ▼
+                   ┌──────────────┐   ┌────────────────┐
+                   │  SSE Stream  │   │  Frontend SPA  │
+                   │  /api/alerts │   │  (static/ )    │
+                   │  /stream     │   │  localhost:8080 │
+                   └──────────────┘   └────────────────┘
 ```
 
----
+### Execution modes
 
-## Tecnologias
-
-| Tecnologia | Versão | Descrição |
-|------------|--------|-----------|
-| Java | 17 | Linguagem principal |
-| Apache Kafka | 3.7.1 / 3.8.0 | Plataforma de streaming |
-| Kafka Streams | 3.8.0 | API de processamento de streams (CEP) |
-| Spring Boot | 3.2.5 | Framework web back-end |
-| Maven | — | Build e dependências |
-| Docker / Docker Compose | — | Cluster Kafka local |
-| Jackson | 2.17.0 | Serialização JSON |
-| SLF4J | 2.0.13 | Logging |
+| Mode | Command | What runs | Use case |
+|------|---------|-----------|----------|
+| **All-in-one** | `make spring-boot` | Spring Boot + StreamsManager (9 topologies) + SSE + REST + frontend | Development, demo |
+| **Standalone** | `make streams` | 9 topologies in a single JVM (no web server) | Testing streams only |
+| **Separate** | Terminal 1: `make streams` + Terminal 2: `make spring-boot` | Streams + web backend in separate JVMs | Debugging, scaled |
 
 ---
 
-## Pré-requisitos
+## Technologies
 
-- **Java 17** ou superior
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Java | 17 | Core language |
+| Apache Kafka | 3.7.1 / 3.8.0 | Event streaming platform |
+| Kafka Streams | 3.8.0 | Stream processing (CEP) |
+| Spring Boot | 3.2.5 | Web backend (REST, SSE, static files) |
+| Maven | — | Build & dependencies |
+| Docker / Docker Compose | — | Local 3-broker Kafka cluster |
+| Jackson | 2.17.0 | JSON serialization |
+| Leaflet.js | 1.9.4 | Interactive fraud map |
+
+---
+
+## Prerequisites
+
+- **Java 17+**
 - **Maven 3.8+**
-- **Docker** e **Docker Compose**
-- **Spring Boot 3.2.5** (gerenciado via Maven, sem instalação manual)
+- **Docker** & **Docker Compose**
 
 ---
 
-## Estrutura do Projeto
+## Project Structure
 
 ```
 .
-├── compose.yaml                    # Docker Compose — cluster Kafka (3 brokers)
-├── Makefile                        # Comandos utilitários
-├── pom.xml                         # Configuração Maven
-├── clients.json                    # Perfis de clientes gerados
+├── compose.yaml                    # 3-broker Kafka cluster (KRaft, no ZooKeeper)
+├── Makefile                        # Build, run, simulate commands
+├── pom.xml                         # Maven config (Spring Boot, Kafka Streams, Jackson)
+├── clients.json                    # 100 generated client profiles
 ├── kafka/
-│   ├── broker1.properties          # Config broker 1
-│   ├── broker2.properties          # Config broker 2
-│   └── broker3.properties          # Config broker 3
+│   ├── broker1.properties          # Broker configs
+│   ├── broker2.properties
+│   └── broker3.properties
 └── src/main/java/com/frauddetection/
     ├── config/
-    │   └── KafkaConfig.java        # Configuração de brokers, tópicos e Streams
+    │   └── KafkaConfig.java        # Topics, brokers, Streams/Producer/Consumer props
     ├── model/
-    │   ├── TransactionEvent.java   # Evento de transação
-    │   ├── AuthEvent.java          # Evento de autenticação
-    │   └── FraudAlert.java         # Alerta de fraude
+    │   ├── TransactionEvent.java   # Bank transaction (PIX, CRED, DEB)
+    │   ├── AuthEvent.java          # Login / password change with geolocation
+    │   ├── FraudAlert.java         # Fraud alert with severity, type, geo
+    │   └── GeoLocation.java        # Haversine distance helper
     ├── serialization/
-    │   ├── JsonSerializer.java
-    │   ├── JsonSerde.java          # Serde genérico para Kafka Streams
-    │   ├── TransactionEventDeserializer.java
-    │   ├── AuthEventDeserializer.java
-    │   └── FraudAlertDeserializer.java
-    ├── producers/
+    │   ├── JsonSerializer.java     # Generic JSON serializer
+    │   ├── JsonDeserializer.java   # Generic JSON deserializer
+    │   ├── JsonSerde.java          # Generic Serde for Kafka Streams
+    │   └── JsonSerdes.java         # Serde factory for each model
+    ├── sources/                    # Event producers (CLI)
     │   ├── LegitimateEventProducer.java
     │   ├── HighAmountFraudProducer.java
     │   ├── BurstTransactionFraudProducer.java
@@ -154,181 +159,202 @@ Este projeto demonstra um pipeline completo de detecção de fraudes financeiras
     │   ├── ParallelLoginFraudProducer.java
     │   ├── FarawayLoginFraudProducer.java
     │   └── UnderObservationFraudProducer.java
-    ├── streams/                               # 9 topologias Kafka Streams
-    │   ├── FraudDetectionTopology.java        # Main que registra todas
-    │   ├── HighAmountTopology.java            # aggregate() + Sliding Window
-    │   ├── BurstTopology.java                 # groupByKey + Tumbling Window
-    │   ├── UnknownDeviceTopology.java         # GlobalKTable Join
-    │   ├── PasswordChangeTopology.java        # KStream-KStream Join
-    │   ├── AccountTakeoverTopology.java       # Duplo KStream-KStream Join
-    │   ├── EmptyingAccountTopology.java       # aggregate() + Tumbling Window
-    │   ├── ParallelLoginTopology.java         # Session Window + Allen
-    │   ├── FarawayLoginTopology.java          # Processor API + KVStore
-    │   └── UnderObservationTopology.java      # Tumbling Window + count
+    ├── streams/                    # 9 independent Kafka Streams topologies
+    │   ├── FraudDetectionTopology.java   # Factory: buildAll() returns List<KafkaStreams>
+    │   ├── FraudDetectionApp.java        # Standalone entry point
+    │   ├── HighAmountTopology.java       # Single tx > R$50,000
+    │   ├── BurstTopology.java            # 5+ txs in 60s
+    │   ├── UnknownDeviceTopology.java    # GlobalKTable join for untrusted devices
+    │   ├── PasswordChangeTopology.java   # Password change event
+    │   ├── AccountTakeoverTopology.java  # Login → pw change → high tx
+    │   ├── EmptyingAccountTopology.java  # 5+ high txs in 60s
+    │   ├── ParallelLoginTopology.java    # Session window + Allen overlaps
+    │   ├── FarawayLoginTopology.java     # Processor API + KeyValueStore + Allen before
+    │   ├── UnderObservationTopology.java # 3+ alerts in 2min
+    │   ├── StreamsManager.java           # @Component: starts/stop all, provides stores
+    │   ├── AccountAggregate.java         # State class for EmptyingAccount
+    │   ├── TxHistory.java                # State class for HighAmount / UnderObservation
+    │   ├── LastLogin.java                # State class for FarawayLogin
+    │   └── FarawayTransformer.java       # Custom Processor API transformer
     ├── web/
-    │   ├── FraudDetectionApplication.java     # Main Spring Boot
-    │   ├── AlertSSEController.java            # SSE endpoint
-    │   └── InteractiveQueryController.java    # REST para State Stores
+    │   ├── FraudDetectionApplication.java    # Spring Boot main
+    │   ├── EventController.java              # POST /api/events/{transaction,auth}
+    │   ├── AlertSSEController.java           # GET /api/alerts/stream (SSE)
+    │   └── InteractiveQueryController.java   # GET /api/queries/*
     └── utils/
-        ├── ClientGenerator.java
-        ├── ClientLoader.java
-        └── ClientProfile.java
+        ├── ClientGenerator.java    # Generates clients.json
+        ├── ClientLoader.java       # Reads clients.json
+        └── ClientProfile.java      # Client profile record
+
+src/main/resources/static/          # Frontend SPA (served by Spring Boot)
+├── index.html                      # SPA entry point
+├── css/style.css                   # Dark theme
+└── js/
+    ├── app.js                      # Router, nav, stats
+    ├── alerts.js                   # SSE + Leaflet map
+    ├── events.js                   # Fraud simulator + manual forms
+    └── queries.js                  # State store queries (faraway-login, observations)
 ```
 
 ---
 
-## Configuração e Execução
+## Quick Start
 
-### 1. Iniciar o cluster Kafka
+```bash
+# 1. Start Kafka cluster (3 brokers)
+make up
+
+# 2. Create topics
+make topics
+
+# 3. Generate & publish client profiles
+make clients
+
+# 4. Build the project
+make build
+
+# 5. Start everything (Spring Boot + 9 topologies + frontend)
+make spring-boot
+
+# 6. Open http://localhost:8080
+
+# 7. In another terminal, inject legitimate traffic
+make simulate
+
+# 8. In another terminal, test fraud scenarios
+make faraway-login
+```
+
+---
+
+## Setup & Execution
+
+### 1. Start Kafka cluster
 
 ```bash
 make up
 ```
 
-Sobe 3 brokers Kafka em containers Docker com configuração KRaft (sem ZooKeeper).
+Starts 3 KRaft brokers (no ZooKeeper):
 
-- **Broker 1** → `localhost:19092`
-- **Broker 2** → `localhost:29092`
-- **Broker 3** → `localhost:39092`
+| Broker | Port |
+|--------|------|
+| kafka-1 | `localhost:19092` |
+| kafka-2 | `localhost:29092` |
+| kafka-3 | `localhost:39092` |
 
-### 2. Criar os tópicos
+### 2. Create topics
 
 ```bash
 make topics
 ```
 
-Cria os 4 tópicos:
+| Topic | Partitions | RF | Notes |
+|-------|-----------|----|-------|
+| `transactions.raw` | 3 | 3 | Transaction events |
+| `auth.events` | 3 | 3 | Auth events (login, password_change) |
+| `fraud.events` | 3 | 3 | Fraud alerts |
+| `clients.profiles` | 1 | 3 | Compacted, for GlobalKTable |
 
-| Tópico | Partições | RF | Tipo |
-|--------|-----------|----|------|
-| `transactions.raw` | 3 | 3 | Eventos de transação |
-| `auth.events` | 3 | 3 | Eventos de autenticação |
-| `fraud.events` | 3 | 3 | Alertas de fraude |
-| `clients.profiles` | 1 | 3 | Tabela compactada de perfis (GlobalKTable) |
-
-### 3. Gerar clientes simulados e popular tópico
+### 3. Generate client profiles
 
 ```bash
 make clients
 ```
 
-Gera `clients.json` com 100 perfis (contas, dispositivos, coordenadas) **e** publica cada perfil no tópico `clients.profiles` (chave=`userId`, cleanup policy = compact).
+Generates `clients.json` with 100 profiles and publishes each to `clients.profiles`.
 
-### 4. Compilar o projeto
+### 4. Build
 
 ```bash
 make build
 ```
 
-Gera o JAR sombreado em `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
+Produces `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
 
-### 5. Executar a topologia Kafka Streams
+### 5. Run
+
+**All-in-one (recommended):**
+```bash
+make spring-boot
+```
+Spring Boot starts on port 8080, serving the frontend SPA, REST API, SSE stream, and all 9 topologies via `StreamsManager`.
+
+**Standalone streams only:**
+```bash
+make streams
+```
+Runs all 9 topologies without the web server. Useful for headless testing.
+
+### 6. Observe alerts
 
 ```bash
-make run-streams-topology
+# Terminal: listen to fraud events directly
+make listen-alerts
 ```
 
-Inicia as 9 topologias de detecção em uma JVM dedicada. As topologias consomem dos tópicos de entrada e produzem alertas para `fraud.events`.
-
-### 6. Executar back-end web (opcional)
-
-```bash
-make run-web-backend
-```
-
-Inicia o servidor Spring Boot com SSE em tempo real e Interactive Queries.
+Or open `http://localhost:8080` and navigate to **Live Alerts**.
 
 ---
 
-## Comandos Make Disponíveis
+## Make Targets
 
-### Infraestrutura
+### Infrastructure
 
-| Comando | Descrição |
-|---------|-----------|
-| `make up` | Inicia o cluster Kafka via Docker Compose |
-| `make down` | Para e remove os containers |
-| `make restart` | Reinicia os serviços recriando os containers |
+| Command | Description |
+|---------|-------------|
+| `make up` | Start Kafka cluster |
+| `make down` | Stop & remove containers |
+| `make restart` | Restart (recreate containers) |
 
 ### Build
 
-| Comando | Descrição |
-|---------|-----------|
-| `make build` | Compila o projeto com Maven |
-| `make clean` | Remove artefatos de build |
+| Command | Description |
+|---------|-------------|
+| `make build` | Compile with Maven |
+| `make clean` | Remove build artifacts |
 
-### Dados
+### Data
 
-| Comando | Descrição |
-|---------|-----------|
-| `make clients` | Gera `clients.json` + publica perfis no tópico `clients.profiles` |
-| `make simulate` | Executa o produtor de eventos legítimos |
+| Command | Description |
+|---------|-------------|
+| `make clients` | Generate `clients.json` + publish to `clients.profiles` |
+| `make simulate` | Run LegitimateEventProducer (continuous) |
 
-### Produtores de Fraude
+### Fraud Sources (CLI)
 
-| Comando | Tipo de Fraude |
-|---------|----------------|
-| `make high-amount` | Transação com valor anormalmente alto |
-| `make burst` | Rajada de transações em curto período |
-| `make unknown-device` | Transação a partir de dispositivo desconhecido |
-| `make password-change` | Alteração de senha suspeita |
-| `make account-takeover` | Sequência: login suspeito → troca de senha → transação de alto valor |
-| `make emptying-account` | Tentativa de esvaziar a conta |
+| Command | Fraud type |
+|---------|------------|
+| `make high-amount` | Single tx > R$50,000 |
+| `make burst` | 10 rapid transactions |
+| `make unknown-device` | Login from untrusted device |
+| `make password-change` | Password change event |
+| `make account-takeover` | Unknown login → pw change → high tx |
+| `make emptying-account` | 4 high-value transactions |
+| `make parallel-login` | Logins from SP + Recife on different devices |
+| `make faraway-login` | Login from SP → Tokyo in 500ms |
+| `make under-observation` | Re-trigger alerts to trigger observation |
 
-### Kafka Streams
+### Streams + Backend
 
-| Comando | Descrição |
-|---------|-----------|
-| `make run-streams-topology` | Executa as 9 topologias Kafka Streams |
-| `make run-web-backend` | Executa o back-end Spring Boot (porta 8080) |
-
-### Testes das Novas Topologias
-
-| Comando | Descrição |
-|---------|-----------|
-| `make test-parallel-login` | Testa detecção de logins paralelos (Allen: overlaps) |
-| `make test-faraway-login` | Testa detecção de login geograficamente impossível (Allen: before) |
-| `make test-under-observation` | Testa detecção de conta sob observação |
+| Command | Description |
+|---------|-------------|
+| `make spring-boot` | Spring Boot (port 8080) + 9 topologies + frontend |
+| `make streams` | Standalone streams (9 topologies, no web) |
+| `make listen-alerts` | Console consumer on `fraud.events` |
 
 ### Kafka Utils
 
-| Comando | Descrição |
-|---------|-----------|
-| `make topics` | Cria os tópicos necessários |
-| `make topics-view` | Lista todos os tópicos |
-| `make topics-describe` | Exibe detalhes dos tópicos da aplicação |
-| `make listen TOPIC=<nome>` | Escuta um tópico no console |
+| Command | Description |
+|---------|-------------|
+| `make topics` | Create topics |
+| `make topics-view` | List topics |
+| `make topics-describe` | Describe application topics |
+| `make listen TOPIC=<name>` | Console consumer on any topic |
 
 ---
 
-## Tipos de Fraude Detectados
-
-| Tipo | Descrição | Lógica de Detecção |
-|------|-----------|--------------------|
-| **HIGH_AMOUNT** | Transação com valor muito acima da média histórica | `aggregate()` + Sliding Window (5 min): se primeira tx > R$ 8.000 OU valor > 3× média |
-| **BURST_TRANSACTIONS** | Muitas transações em curto intervalo | `groupByKey()` + `count()` + Tumbling Window (60s): ≥ 5 transações |
-| **UNKNOWN_DEVICE** | Dispositivo não cadastrado realiza transação | `KStream-GlobalKTable Join`: deviceId fora dos trusted_devices |
-| **PASSWORD_CHANGE** | Alteração de senha seguida de transação de alto valor | `KStream-KStream Join` (5 min): password_change + tx > R$ 1.000 |
-| **ACCOUNT_TAKEOVER** | Sequência completa de invasão | Duplo `KStream-KStream Join` (10 min): login desconhecido → pw change → tx alta |
-| **EMPTYING_ACCOUNT** | Tentativa de esvaziar saldo da conta | `aggregate()` + Tumbling Window (60s): ≥ 5 txs de alto valor |
-| **SUSPICIOUS_PARALLEL_LOGIN** | Logins simultâneos de dispositivos diferentes | Session Window + Allen overlaps: sessões ativas com devices diferentes sobrepostas |
-| **SUSPICIOUS_FARAWAY_LOGIN** | Login de localizações impossivelmente distantes | Processor API + KeyValueStore + Allen before: velocidade > 900 km/h |
-| **ACCOUNT_UNDER_OBSERVATION** | Conta com múltiplos alertas de fraude | Tumbling Window + count(): ≥ 3 alertas no mesmo accountId em 2 min |
-
----
-
-## Tópicos Kafka
-
-| Tópico | Partições | Replicação | Conteúdo |
-|--------|-----------|------------|----------|
-| `transactions.raw` | 3 | 3 | Eventos de transação (PIX, CRED, DEB) |
-| `auth.events` | 3 | 3 | Eventos de autenticação (login, password_change) |
-| `fraud.events` | 3 | 3 | Alertas de fraude gerados pelas topologias |
-| `clients.profiles` | 1 | 3 | Perfis de clientes (compactado, para GlobalKTable) |
-
----
-
-## Modelos de Dados
+## Data Models
 
 ### TransactionEvent
 
@@ -346,8 +372,6 @@ Inicia o servidor Spring Boot com SSE em tempo real e Interactive Queries.
 }
 ```
 
-> O campo `timestamp` é populado pelos produtores (event-time) para uso correto das janelas temporais no Kafka Streams.
-
 ### AuthEvent
 
 ```json
@@ -357,8 +381,8 @@ Inicia o servidor Spring Boot com SSE em tempo real e Interactive Queries.
   "eventType": "login",
   "deviceId": "dev-u-000-0",
   "ipAddress": "177.10.174.12",
-  "latitude": -20.3155,
-  "longitude": -40.3128,
+  "latitude": -20.3,
+  "longitude": -40.3,
   "timestamp": 1715712000000
 }
 ```
@@ -371,519 +395,273 @@ Inicia o servidor Spring Boot com SSE em tempo real e Interactive Queries.
   "alertType": "ACCOUNT_TAKEOVER",
   "userId": "u-000",
   "accountId": "acc-u-000-0",
-  "description": "Account takeover: Suspect login -> Password change -> High value transaction (R$5000.00)",
+  "description": "Password change after 3 failed attempts",
   "severity": "CRITICAL",
-  "timestamp": 1715712000000
+  "timestamp": 1715712000000,
+  "latitude": -20.3,
+  "longitude": -40.3
 }
 ```
 
----
-
-## Produtores de Eventos
-
-### LegitimateEventProducer
-- Gera eventos normais continuamente
-- 70% de chance de transação, 30% de evento de autenticação
-- Valores entre R$ 150–200
-- Usa apenas dispositivos e IPs confiáveis
-
-### Produtores de Fraude
-Cada produtor injeta **um evento malicioso específico**:
-
-| Producer | Comportamento |
-|----------|---------------|
-| `HighAmountFraudProducer` | Transação única entre R$ 8.000–15.000 |
-| `BurstTransactionFraudProducer` | 10 transações rápidas em sequência |
-| `UnknownDeviceFraudProducer` | Transação com `deviceId` aleatório (não confiável) |
-| `PasswordChangeFraudProducer` | Evento `password_change` após login de dispositivo desconhecido |
-| `AccountTakeoverFraudProducer` | Sequência completa: login desconhecido + troca de senha + transação alta |
-| `EmptyingAccountFraudProducer` | Múltiplas transações de alto valor seguidas |
-| `ParallelLoginFraudProducer` | Logins de SP e Recife em devices不同 (teste) |
-| `FarawayLoginFraudProducer` | Login de SP e Tóquio em 500ms (teste) |
-| `UnderObservationFraudProducer` | Redispara alertas para o mesmo accountId (teste) |
+`latitude` / `longitude` are present only for alerts based on `AuthEvent` (unknown device, password change, account takeover, faraway login). They are rendered on the Leaflet map in the frontend.
 
 ---
 
----
+## Topologies
 
-## Etapa 2 — Migração para Kafka Streams e CEP (Plano de Implementação)
+Each topology runs as an **independent `KafkaStreams` instance** with its own `application.id`, consumer group, and state stores. This provides fault isolation — one topology crashing does not affect the others, and each can be scaled independently.
 
-Esta seção documenta o plano de implementação para a Etapa 2, conforme requisitos do **Projeto2.pdf** e conceitos do arquivo **gambiarra/conceitos.txt**. A implementação substitui **todos os consumidores manuais** por **9 topologias Kafka Streams**, dividida em **7 fases sequenciais**.
+| # | Topology | `application.id` | Input | Logic | State |
+|---|----------|------------------|-------|-------|-------|
+| 1 | HighAmount | `fraud-detection-high-amount` | `transactions.raw` | Single tx > R$50,000 | Stateless |
+| 2 | Burst | `fraud-detection-burst` | `transactions.raw` | 5+ txs in 60s window | Tumbling Window |
+| 3 | UnknownDevice | `fraud-detection-unknown-device` | `transactions.raw` + `clients.profiles` | GlobalKTable join: device not in trusted list | GlobalKTable |
+| 4 | PasswordChange | `fraud-detection-password-change` | `auth.events` | `password_change` event | Stateless |
+| 5 | AccountTakeover | `fraud-detection-account-takeover` | `auth.events` | Password change after failed attempts | Stateless |
+| 6 | EmptyingAccount | `fraud-detection-emptying-account` | `transactions.raw` | 5+ txs ≥ R$1,000 in 60s | Tumbling Window |
+| 7 | ParallelLogin | `fraud-detection-parallel-login` | `auth.events` | Simultaneous logins, different devices (Allen: overlaps) | Session Window |
+| 8 | FarawayLogin | `fraud-detection-faraway-login` | `auth.events` | Impossible travel speed > 900 km/h (Allen: before) | KeyValueStore (`last-login-store`) |
+| 9 | UnderObservation | `fraud-detection-under-observation` | `fraud.events` | 3+ alerts per accountId in 2min | Tumbling Window (`observation-store`) |
 
----
-
-### Fase 1: Atualizar Modelos de Dados
-
-**Objetivo:** Adicionar campos necessários para as topologias CEP.
-
-| Modelo | Campos a adicionar | Motivo |
-|--------|-------------------|--------|
-| `AuthEvent.java` | `latitude` (Double), `longitude` (Double) | Necessário para cálculo de distância no `SUSPICIOUS_FARAWAY_LOGIN` |
-| `FraudAlert.java` | `alertId` (String, UUID), `accountId` (String), `severity` (String) | Rastreabilidade, associação com conta, priorização |
-| `TransactionEvent.java` | `timestamp` (long) | Event-time para janelas temporais do Kafka Streams |
-| `ClientProfile.java` | `homeLatitude` (double), `homeLongitude` (double) | Coordenadas geográficas dos clientes |
-
-**Artefatos alterados:**
-- `AuthEvent.java` — construtor, getters/setters, equals/hashCode, toString
-- `FraudAlert.java` — construtor com geração automática de `alertId`, getters/setters, equals/hashCode, toString
-- `TransactionEvent.java` — novo campo `timestamp`, construtor sobrecarregado
-- `ClientProfile.java` — novo record com campos de geolocalização
-- `ClientGenerator.java` — gerar `homeLatitude` (ex: -15 a -25) e `homeLongitude` (ex: -40 a -50) para o Brasil; **publicar perfis no tópico `clients.profiles`**
-- `ClientLoader.java` — ler os novos campos do JSON
-- **Todos os produtores** — preencher `timestamp` com `System.currentTimeMillis()` nos eventos
-
----
-
-### Fase 2: Infraestrutura — pom.xml
-
-**Objetivo:** Adicionar dependências para Kafka Streams e Spring Boot.
-
-**2.1** Adicionar `kafka-streams`:
-```xml
-<dependency>
-    <groupId>org.apache.kafka</groupId>
-    <artifactId>kafka-streams</artifactId>
-    <version>${kafka.version}</version>
-</dependency>
-```
-
-**2.2** Adicionar Spring Boot Web como parent POM:
-```xml
-<parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.2.5</version>
-</parent>
-```
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
-</dependency>
-```
-
-**2.3** Atualizar `KafkaConfig.java`:
-- `acks=all` (era "1") — resiliência
-- Novo método `streamsProps(String appId)` com:
-  - `APPLICATION_ID_CONFIG`
-  - `BOOTSTRAP_SERVERS_CONFIG`
-  - `DEFAULT_KEY_SERDE_CLASS_CONFIG` = `Serdes.String().getClass()`
-  - `DEFAULT_VALUE_SERDE_CLASS_CONFIG` = `JsonSerde.class`
-  - `STATE_DIR_CONFIG` = `/tmp/kafka-streams`
-  - `COMMIT_INTERVAL_MS_CONFIG` = 100
-  - `CACHE_MAX_BYTES_BUFFERING_CONFIG` = 10 MB
-
-**2.4** Adicionar tópico `clients.profiles` no `make topics` (1 partição, compactado)
-
----
-
-### Fase 3: Serdes para Kafka Streams
-
-**Objetivo:** Criar Serde genérico para que o Kafka Streams serialize/desserialize os modelos automaticamente.
-
-**3.1** Criar `src/main/java/com/frauddetection/serialization/JsonSerde.java`:
-- `JsonSerde<T> implements Serde<T>`
-- Reusa `JsonSerializer` para serialização
-- Cria `JsonDeserializer<T>` interno para desserialização (genérico via `TypeReference`)
-
----
-
-### Fase 4: Topologias Kafka Streams (9 topologias)
-
-**Objetivo:** Implementar 9 topologias no pacote `com.frauddetection.streams`, substituindo todos os consumidores manuais.
-
-#### 4.0 `FraudDetectionTopology.java` — Classe principal
-
-```java
-StreamsBuilder builder = new StreamsBuilder();
-registerHighAmount(builder);
-registerBurst(builder);
-registerUnknownDevice(builder);
-registerPasswordChange(builder);
-registerAccountTakeover(builder);
-registerEmptyingAccount(builder);
-registerParallelLogin(builder);
-registerFarawayLogin(builder);
-registerUnderObservation(builder);
-KafkaStreams streams = new KafkaStreams(builder.build(), streamsProps);
-streams.start();
-Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
-```
-
-#### 4.1 `HighAmountTopology` — Substitui `HighAmountConsumer`
+### 1. HighAmount
 
 ```
 transactions.raw
-  └── groupBy(accountId)
-        └── windowedBy(SlidingWindows.ofTimeDifferenceAndGrace(Duration.ofMinutes(5), Duration.ofMinutes(1)))
-              └── aggregate(
-                    () -> new TxHistory(),
-                    (accountId, tx, history) -> {
-                        double avg = history.average();
-                        if (history.isEmpty() && tx.getAmount() > 8000.0) alert(HIGH_AMOUNT);
-                        else if (!history.isEmpty() && tx.getAmount() > avg * 3) alert(HIGH_AMOUNT);
-                        history.add(tx);
-                        return history;
-                    })
-sink → fraud.events
+  └── filter(amount > 50000)
+        └── map → FraudAlert.highValue(tx)
+              └── to fraud.events
 ```
 
-- Operações: `groupBy()`, `aggregate()` (stateful)
-- Janela: Sliding Window (5 min)
+**Threshold:** R$ 50,000 (hardcoded `LIMIT`). A single transaction above this limit triggers `HIGH_VALUE_TRANSACTION` (severity: HIGH).
 
-#### 4.2 `BurstTopology` — Substitui `BurstTransactionConsumer`
+### 2. Burst
 
 ```
 transactions.raw
-  └── groupBy(accountId)
-        └── windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofSeconds(60)))
+  └── groupByKey()
+        └── windowedBy(TumblingWindow.of(Duration.ofSeconds(60)))
               └── count()
-                    └── filter((key, count) -> count >= 5)
-                          └── mapValues(...)
-sink → fraud.events (BURST_TRANSACTIONS)
+                    └── filter(count >= 5)
+                          └── map → FraudAlert.transactionBurst(...)
+                                └── to fraud.events
 ```
 
-- Operações: `groupByKey()`, `count()` (stateful)
-- Janela: Tumbling Window (60s)
+Triggers `TRANSACTION_BURST` (severity: MEDIUM) when 5+ transactions occur in a 60-second window for the same account.
 
-#### 4.3 `UnknownDeviceTopology` — Substitui `UnknownDeviceConsumer`
-
-Usa `GlobalKTable<String, ClientProfile>` carregada do tópico `clients.profiles`.
+### 3. UnknownDevice
 
 ```
-clients.profiles → GlobalKTable (userId → ClientProfile)
-
-transactions.raw → KStream(userId, TransactionEvent)
-  └── join(globalClientsTable,
-        (tx, profile) -> profile.getTrustedDevices().contains(tx.getDeviceId()) ? null : tx)
-        └── filter(tx -> tx != null)
-sink → fraud.events (UNKNOWN_DEVICE)
+clients.profiles → GlobalKTable(key=userId)
+transactions.raw → KStream(key=userId)
+  └── join(globalTable, ...)
+        └── filter(deviceId NOT in trustedDevices)
+              └── map → FraudAlert.unknownDevice(...)
+                    └── to fraud.events
 ```
 
-- Operações: `join()` com `GlobalKTable` (stateful)
-- Store: GlobalKTable em memória (cópia completa em cada instância)
+Joins transactions against the full in-memory client table. If the transaction's `deviceId` is not in the client's `trustedDevices`, triggers `UNKNOWN_DEVICE` (severity: MEDIUM).
 
-#### 4.4 `PasswordChangeTopology` — Substitui `PasswordChangeConsumer`
+### 4. PasswordChange
 
 ```
 auth.events
-  ├── filter(eventType == "password_change") → KStream(userId, PwChangeEvent)
-  └── filter(eventType == "login") → KStream(userId, LoginEvent) (para pipeline)
-
-transactions.raw → filter(amount > 1000.0) → KStream(userId, TxEvent)
-
-PwChangeStream.join(TxStream,
-    JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(5)))
-  → filter auth antes de tx (Allen: before)
-sink → fraud.events (PASSWORD_CHANGE)
+  └── filter(eventType == "password_change")
+        └── map → FraudAlert.passwordChange(auth)
+              └── to fraud.events
 ```
 
-- Operações: `filter()` (stateless), `join()` (stateful)
-- Janela: JoinWindow (5 min)
+Triggers `PASSWORD_CHANGE` (severity: HIGH) on any `password_change` auth event.
 
-#### 4.5 `AccountTakeoverTopology` — Substitui `AccountTakeoverConsumerProducer`
+### 5. AccountTakeover
 
 ```
 auth.events
-  ├── filter(eventType == "login" && device não confiável) → KStream(userId, LoginEvent)
-  └── filter(eventType == "password_change") → KStream(userId, PwChangeEvent)
-
-LoginStream.join(PwChangeStream,
-    JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(10)))
-  → KStream(userId, MidEvent)
-
-transactions.raw
-  └── filter(amount > 1000.0) → KStream(userId, TxEvent)
-
-MidStream.join(TxStream,
-    JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(10)))
-sink → fraud.events (ACCOUNT_TAKEOVER)
+  └── filter(eventType == "password_change" AND recentFailedAttempts > 0)
+        └── map → FraudAlert.accountTakeover(auth)
+              └── to fraud.events
 ```
 
-- Relação Allen: `Login before PwChange before HighTx`
-- Operações: `filter()` (stateless), `join()` (stateful)
+Triggers `ACCOUNT_TAKEOVER` (severity: CRITICAL) when a password change follows recent failed login attempts — the most severe alert.
 
-#### 4.6 `EmptyingAccountTopology` — Substitui `EmptyingAccountConsumerProducer`
+### 6. EmptyingAccount
 
 ```
 transactions.raw
-  └── filter(amount >= 1000.0)
-        └── groupBy(userId)
-              └── windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofSeconds(60)))
-                    └── count()
-                          └── filter((key, count) -> count >= 5)
-sink → fraud.events (EMPTYING_ACCOUNT)
+  └── filter(amount >= 1000)
+        └── groupByKey()
+              └── windowedBy(TumblingWindow.of(Duration.ofSeconds(60)))
+                    └── aggregate(AccountAggregate, ...)
+                          └── filter(count >= 5)
+                                └── map → FraudAlert.emptyingAccount(...)
+                                      └── to fraud.events
 ```
 
-- Operações: `groupByKey()`, `count()` (stateful)
-- Janela: Tumbling Window (60s)
+Triggers `EMPTYING_ACCOUNT` (severity: HIGH) when 5+ transactions of at least R$1,000 occur in 60 seconds for the same account.
 
-#### 4.7 `ParallelLoginTopology` — Nova Situação 1
+### 7. ParallelLogin
 
 ```
 auth.events
   └── filter(eventType == "login")
         └── groupByKey()
-              └── windowedBy(SessionWindows.withInactivityGap(Duration.ofMinutes(5)))
-                    └── aggregate(
-                          () -> new SessionState(),
-                          (userId, auth, state) -> {
-                              if (state.hasActiveSession() &&
-                                  !state.getDeviceId().equals(auth.getDeviceId()) &&
-                                  state.overlapsWith(auth.getTimestamp())) {
-                                  emitAlert(SUSPICIOUS_PARALLEL_LOGIN);
-                              }
-                              state.addSession(auth);
-                              return state;
-                          })
+              └── windowedBy(SessionWindows.with(Duration.ofMinutes(5)))
+                    └── aggregate(SessionState, ...)
+                          └── filter(overlapping sessions, different devices)
+                                └── map → FraudAlert.parallelLogin(...)
+                                      └── to fraud.events
 ```
 
-- Relação Allen: `X overlaps Y` ou `X during Y`
-- Operações: `filter()` (stateless), `groupByKey()`, `aggregate()` (stateful)
-- Janela: Session Window (gap de 5 min)
+Uses **Session Windows** with a 5-minute inactivity gap. When two login sessions overlap in time (Allen: overlaps or during) from **different devices** for the same user, triggers `SUSPICIOUS_PARALLEL_LOGIN` (severity: HIGH).
 
-#### 4.8 `FarawayLoginTopology` — Nova Situação 2
-
-Usa Processor API (custom `Transformer`) com KeyValueStore local (RocksDB).
+### 8. FarawayLogin
 
 ```
 auth.events
   └── filter(eventType == "login")
-        └── transform(() -> new FarawayTransformer())
-
-class FarawayTransformer implements Transformer<String, AuthEvent, KeyValue<String, FraudAlert>> {
-    KeyValueStore<String, LastLogin> store;
-
-    void init(ProcessorContext context) {
-        store = context.getStateStore("faraway-login-store");
-    }
-
-    KeyValue<String, FraudAlert> transform(String key, AuthEvent auth) {
-        LastLogin last = store.get(key);
-        if (last != null) {
-            double dist = haversine(last.lat, last.lon, auth.getLatitude(), auth.getLongitude());
-            long deltaT = auth.getTimestamp() - last.timestamp;
-            double velocidade = dist / (deltaT / 3600.0);
-            if (velocidade > 900.0) emitAlert(SUSPICIOUS_FARAWAY_LOGIN);
-        }
-        store.put(key, new LastLogin(auth.getLatitude(), auth.getLongitude(), auth.getTimestamp()));
-        return null;
-    }
-}
+        └── transform(FarawayTransformer)
+              └── KeyValueStore("last-login-store")
+                    └── if velocity > 900 km/h → FraudAlert.farawayLogin(...)
+                          └── to fraud.events
 ```
 
-- Relação Allen: `X before Y`
-- Operações: `filter()` (stateless), `transform()` + `KeyValueStore` (stateful)
+Uses **Processor API** (`Transformer`) with a local RocksDB `KeyValueStore`. Computes Haversine distance between consecutive logins and checks if the travel speed exceeds 900 km/h (Allen: before). Triggers `SUSPICIOUS_FARAWAY_LOGIN` (severity: HIGH).
 
-#### 4.9 `UnderObservationTopology` — Nova Situação 3
+- State store: `last-login-store` (queryable via REST)
+- Example: SP to Tokyo in 500ms ≈ 133,000,000 km/h → alert.
+
+### 9. UnderObservation
 
 ```
 fraud.events
-  └── filter(alerta existente, não o próprio UNDER_OBSERVATION)
-        └── selectKey((k, v) -> v.getAccountId())
+  └── filter(type != UNDER_OBSERVATION)
+        └── selectKey((k,v) → v.getAccountId())
               └── groupByKey()
-                    └── windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(2)))
-                          └── count(Materialized.as("observation-store"))
-                                └── filter((key, count) -> count >= 3)
-                                      └── mapValues(count -> new FraudAlert("ACCOUNT_UNDER_OBSERVATION", ...))
-                                            └── to("fraud.events")
+                    └── windowedBy(TumblingWindow.of(Duration.ofMinutes(2)))
+                          └── count()
+                                └── filter(count >= 3)
+                                      └── map → FraudAlert.underObservation(...)
+                                            └── to fraud.events
 ```
 
-- Operações: `filter()`, `selectKey()` (stateless), `groupByKey()`, `count()` (stateful)
-- Janela: Tumbling Window (2 min)
-- Store: `observation-store` para Interactive Queries
+Feeds on its own output topic (minus its own alert type). When 3+ alerts fire for the same `accountId` in a 2-minute window, triggers `ACCOUNT_UNDER_OBSERVATION` (severity: LOW).
+
+- State store: `observation-store` (queryable via REST)
+
+### Interactive Queries
+
+The `StreamsManager` Spring Bean manages all 9 `KafkaStreams` instances. It exposes `getStore(storeName)` to find a state store across all instances.
+
+Available queryable stores:
+
+| Store | Topology | Query endpoint |
+|-------|----------|----------------|
+| `last-login-store` | FarawayLogin | `GET /api/queries/faraway-logins/{userId}` |
+| `observation-store` | UnderObservation | `GET /api/queries/observations` |
 
 ---
 
-### Mapeamento de Conceitos
+## REST API
 
-| Feature | Operações Stateless | Operações Stateful | Tipo de Janela / Store | Relação de Allen |
-|---|---|---|---|---|
-| **HighAmount** | `filter()`, `mapValues()` | `aggregate()` | Sliding Window (5 min) | — |
-| **Burst** | `filter()` | `groupByKey()`, `count()` | Tumbling Window (60s) | — |
-| **UnknownDevice** | `filter()` | `join()` (GlobalKTable) | GlobalKTable em memória | — |
-| **PasswordChange** | `filter()` | `join()` (KStream-KStream) | JoinWindow (5 min) | $X\ before\ Y$ |
-| **AccountTakeover** | `filter()` | `join()` (KStream-KStream) | JoinWindow (10 min) | $X\ before\ Y$ |
-| **EmptyingAccount** | `filter()` | `groupByKey()`, `count()` | Tumbling Window (60s) | — |
-| **ParallelLogin** | `filter()` | `groupByKey()`, `aggregate()` | Session Window (5 min gap) | $X\ overlaps\ Y$ |
-| **FarawayLogin** | `filter()` | `transform()` + `KeyValueStore` | RocksDB Local State Store | $X\ before\ Y$ |
-| **UnderObservation** | `filter()`, `selectKey()` | `groupByKey()`, `count()` | Tumbling Window (2 min) | — |
+All endpoints are served on `http://localhost:8080`.
 
-Configuração de caching: `commit.interval.ms=100` e `CACHE_MAX_BYTES_BUFFERING=10MB` para *Event Coalescing* e *Data Deduplication*.
+### Events
 
----
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/events/transaction` | Publish a `TransactionEvent` |
+| `POST` | `/api/events/auth` | Publish an `AuthEvent` |
 
-### Fase 5: Back-end Spring Boot
+### SSE Stream
 
-**Objetivo:** Criar API REST com SSE para consumo em tempo real dos alertas.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/alerts/stream` | SSE — real-time fraud alerts (event name: `alert`) |
 
-**5.1** `FraudDetectionApplication.java` — classe main Spring Boot:
-```java
-@SpringBootApplication
-public class FraudDetectionApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(FraudDetectionApplication.class, args);
-    }
+### Interactive Queries
 
-    @Bean
-    public KafkaStreams fraudDetectionStreams() {
-        FraudDetectionTopology topology = new FraudDetectionTopology();
-        KafkaStreams streams = new KafkaStreams(topology.build(), KafkaConfig.streamsProps("fraud-detection-app"));
-        streams.start();
-        return streams;
-    }
-}
-```
-
-**5.2** `AlertSSEController.java` — SSE endpoint:
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| `GET` | `/api/alerts/stream` | SSE — stream de alertas em tempo real |
-
-- Usa `SseEmitter` do Spring
-- Thread consumidora assina `fraud.events` e faz broadcast
-
-**5.3** `InteractiveQueryController.java` — REST para State Stores:
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| `GET` | `/api/queries/faraway-logins/{userId}` | Último login do usuário no RocksDB |
-| `GET` | `/api/queries/observations` | Contas com count >= 3 na observation-store |
-
-- Usa `KafkaStreams.store()` + `ReadOnlyKeyValueStore` para Interactive Queries
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/queries/faraway-logins/{userId}` | Last login location from `last-login-store` |
+| `GET` | `/api/queries/observations` | Accounts under observation with tx counts |
 
 ---
 
-### Fase 6: Produtores de Teste
+## Frontend
 
-**Objetivo:** Criar produtores que disparam as 3 novas situações para validação.
+A pure HTML + JS SPA (no framework), served by Spring Boot from `src/main/resources/static/`.
 
-**6.1** `ParallelLoginFraudProducer.java`
-- Seleciona um cliente
-- Produz login de São Paulo (`lat: -23.5, lng: -46.6`) em device conhecido
-- Sleep 2s
-- Produz login de Recife (`lat: -8.0, lng: -34.9`) em device diferente
-- Session Window de 5 min cobre ambos → overlap temporal → `SUSPICIOUS_PARALLEL_LOGIN`
+### Pages
 
-**6.2** `FarawayLoginFraudProducer.java`
-- Seleciona um cliente
-- Produz login de São Paulo (`lat: -23.5, lng: -46.6`)
-- Sleep 500ms
-- Produz login de Tóquio (`lat: 35.7, lng: 139.7`) — ~18.500 km em 500ms → `SUSPICIOUS_FARAWAY_LOGIN`
+| Page | Route | Description |
+|------|-------|-------------|
+| Dashboard | `#dashboard` | Stats cards (alerts by severity) + recent alerts feed |
+| Live Alerts | `#alerts` | SSE alert feed + Leaflet map with geo markers |
+| Simulator | `#simulator` | One-click fraud scenario buttons |
+| Create Event | `#create` | Transaction form + simulated Login / Change Password UI |
+| Queries | `#queries` | Query faraway-login store and observation store |
 
-**6.3** `UnderObservationFraudProducer.java`
-- Consumer que lê `fraud.events` e re-produz alertas para o mesmo `accountId`
-- Ao atingir 3+ alertas, a topologia UnderObservation emite `ACCOUNT_UNDER_OBSERVATION`
+### Live Alerts Map
 
----
+- Leaflet.js map centred on Brazil (zoom 4)
+- Circle markers coloured by severity:
+  - 🔴 CRITICAL → red
+  - 🟡 HIGH → amber
+  - 🔵 MEDIUM → blue
+  - 🟢 LOW → green
+- Click for popup: alert type, description, timestamp
+- Clear button resets feed + markers
+- Auto-reconnects on SSE disconnect
 
-### Fase 7: Makefile — Targets Atualizados
+### Create Event: Login
 
-**Removidos** (consumidores manuais e tmux não existem mais):
-- `detect-high-amount`, `detect-burst`, `detect-unknown-device`, `detect-password-change`, `detect-account-takeover`, `detect-emptying-account`
-- `tmux`, `tmux-scaled`, `tmux-kill`
+Simulated login form (not a real login — it publishes an `AuthEvent`):
 
-**Modificado**:
-- `make clients` — agora também publica perfis no tópico `clients.profiles`
-- `make topics` — agora cria também `clients.profiles`
+- **Username** → `userId`
+- **Password** — visual only, not sent
+- **Remember this device** checkbox:
+  - Checked → trusted device (no alert)
+  - Unchecked → unknown device (triggers `UNKNOWN_DEVICE` alert)
 
-**Adicionados**:
-```makefile
-run-streams-topology: build        ## Run all 9 Kafka Streams topologies
-	java -cp $(JAVA_JAR) com.frauddetection.streams.FraudDetectionTopology
+### Create Event: Change Password
 
-run-web-backend: build             ## Run Spring Boot web backend (port 8080)
-	java -cp $(JAVA_JAR) com.frauddetection.web.FraudDetectionApplication
+Simulated password change form:
 
-test-parallel-login: build         ## Test suspicious parallel login detection
-	java -cp $(JAVA_JAR) com.frauddetection.producers.ParallelLoginFraudProducer
+- **Username** → `userId`
+- Passwords must match (client-side validation)
+- Publishes a `password_change` `AuthEvent` (triggers `PASSWORD_CHANGE` alert)
 
-test-faraway-login: build          ## Test impossible faraway login detection
-	java -cp $(JAVA_JAR) com.frauddetection.producers.FarawayLoginFraudProducer
-
-test-under-observation: build      ## Test account under observation detection
-	java -cp $(JAVA_JAR) com.frauddetection.producers.UnderObservationFraudProducer
-```
+All technical fields (`eventId`, `deviceId`, `ipAddress`, `latitude`, `longitude`) are auto-generated on submit.
 
 ---
 
-### Dependências entre Fases
+## CLI Sources
 
-```
-Fase 1 ──► Fase 2 ──► Fase 3 ──► Fase 4
-                                     │
-                            ┌────────┴────────┐
-                            ▼                 ▼
-                        Fase 6            Fase 5
-                            │                 │
-                            └────────┬────────┘
-                                     ▼
-                                  Fase 7
-```
+### LegitimateEventProducer
 
-Cada fase pode ser implementada como uma etapa isolada com validação intermediária (`make build`).
+Generates normal traffic continuously:
 
----
+- 70% chance of a transaction (R$150–200), 30% auth event
+- Uses only trusted devices and home IPs
+- Publishes to `transactions.raw` and `auth.events`
 
-### Conceitos Utilizados
+### Fraud Sources
 
-| Conceito | Aplicação |
-|----------|-----------|
-| Kafka Streams DSL | Todas as 9 topologias |
-| KStream-KStream Join (Windowed) | PasswordChange, AccountTakeover |
-| KStream-GlobalKTable Join | UnknownDevice |
-| Session Window | ParallelLogin |
-| Sliding Window | HighAmount |
-| Tumbling Window | Burst, EmptyingAccount, UnderObservation |
-| Processor API + KeyValueStore | FarawayLogin |
-| Álgebra de Allen: before | PasswordChange, AccountTakeover, FarawayLogin |
-| Álgebra de Allen: overlaps / during | ParallelLogin |
-| Stateless: filter, mapValues, selectKey | Todas as topologias |
-| Stateful: aggregate, count, join, transform | Todas as topologias |
-| Interactive Queries | WebServer (FarawayLogin, UnderObservation) |
-| GlobalKTable | UnknownDevice (clientes em memória) |
-| RocksDB + Changelog Topics | State Stores internas |
-| Event Coalescing / Caching | Config `CACHE_MAX_BYTES_BUFFERING` |
-| Producer Acks: all | `KafkaConfig.producerProps()` |
-| Event-time | Timestamp dos eventos para janelas |
+Each CLI source injects a specific fraud pattern:
+
+| Source | Behaviour |
+|--------|-----------|
+| `HighAmountFraudProducer` | Single transaction R$80,000–150,000 |
+| `BurstTransactionFraudProducer` | 10 rapid transactions |
+| `UnknownDeviceFraudProducer` | Auth with random deviceId |
+| `PasswordChangeFraudProducer` | Login from unknown device → password change |
+| `AccountTakeoverFraudProducer` | Unknown login → pw change (3 failed attempts) → high tx |
+| `EmptyingAccountFraudProducer` | 4 transactions of R$3,000–5,000 |
+| `ParallelLoginFraudProducer` | Login SP + Recife on different devices |
+| `FarawayLoginFraudProducer` | Login SP → Tokyo in 500ms |
+| `UnderObservationFraudProducer` | Re-reads fraud.events and re-publishes to trigger observation |
 
 ---
 
-## Exemplos de Fluxo Completo
+## License
 
-### Fluxo Completo (Kafka Streams)
-
-```bash
-# Terminal 1 — infraestrutura
-make up
-make topics
-make clients
-make build
-
-# Terminal 2 — topologia Kafka Streams (9 detectores rodando)
-make run-streams-topology
-
-# Terminal 3 — eventos legítimos
-make simulate
-
-# Terminal 4 — injetar fraudes
-make high-amount
-make burst
-make unknown-device
-make password-change
-make account-takeover
-make emptying-account
-
-# Terminal 5 — testar novas topologias CEP
-make test-parallel-login
-make test-faraway-login
-make test-under-observation
-
-# Terminal 6 — back-end web (opcional)
-make run-web-backend
-```
-
----
-
-## Licença
-
-Este projeto está licenciado sob a licença [Creative Commons Atribuição-CompartilhaIgual 4.0 Internacional (CC BY-SA 4.0)](http://creativecommons.org/licenses/by-sa/4.0/). Você pode compartilhar e adaptar este material, desde que atribua o crédito apropriado e distribua sob a mesma licença.
+This project is licensed under [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](http://creativecommons.org/licenses/by-sa/4.0/).

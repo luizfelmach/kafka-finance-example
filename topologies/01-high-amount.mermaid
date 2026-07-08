@@ -1,0 +1,12 @@
+flowchart LR
+    subgraph Input
+        A[transactions.raw]
+    end
+    subgraph Process
+        B[filter: amount > 50000]
+        C[mapValues: to FraudAlert]
+    end
+    subgraph Output
+        D[fraud.events]
+    end
+    A --> B --> C --> D

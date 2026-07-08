@@ -1,0 +1,63 @@
+flowchart LR
+    subgraph Producers
+        L[LegitimateProducer]
+        H[HighAmountProducer]
+        B[BurstProducer]
+        U[UnknownDeviceProducer]
+        PW[PasswordChangeProducer]
+        AT[AccountTakeoverProducer]
+        EA[EmptyingAccountProducer]
+        PL[ParallelLoginProducer]
+        FL[FarawayLoginProducer]
+        UO[UnderObservationProducer]
+    end
+    subgraph Topics
+        TX[transactions.raw]
+        AU[auth.events]
+        CP[clients.profiles]
+        FE[fraud.events]
+    end
+    subgraph Topologies
+        HA[HighAmount<br/>stateless filter]
+        BT[Burst<br/>tumbling 5min]
+        UD[UnknownDevice<br/>GlobalKTable join]
+        PC[PasswordChange<br/>stateless filter]
+        ATO[AccountTakeover<br/>stateless filter]
+        EAC[EmptyingAccount<br/>sliding 10min]
+        PLG[ParallelLogin<br/>session 10s]
+        FLL[FarawayLogin<br/>Processor API]
+        UOV[UnderObservation<br/>aggregate]
+    end
+    subgraph Output
+        SSE[SSE / Frontend]
+    end
+    L --> TX
+    H --> TX
+    B --> TX
+    EA --> TX
+    UO --> TX
+    U --> AU
+    PW --> AU
+    AT --> AU
+    PL --> AU
+    FL --> AU
+    TX --> HA
+    TX --> BT
+    TX --> EAC
+    TX --> UOV
+    AU --> UD
+    AU --> PC
+    AU --> ATO
+    AU --> PLG
+    AU --> FLL
+    CP --> UD
+    HA --> FE
+    BT --> FE
+    UD --> FE
+    PC --> FE
+    ATO --> FE
+    EAC --> FE
+    PLG --> FE
+    FLL --> FE
+    UOV --> FE
+    FE --> SSE

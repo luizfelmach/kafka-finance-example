@@ -1,0 +1,21 @@
+flowchart LR
+    subgraph Input
+        A[auth.events]
+        B[clients.profiles<br/>compacted topic]
+    end
+    subgraph Process
+        A1[filter: deviceId != null]
+        C{join: device in trustedDevices?}
+        D[filter: auth != null]
+        E[mapValues: to FraudAlert]
+    end
+    subgraph State
+        F[(GlobalKTable<br/>RocksDB)]
+    end
+    subgraph Output
+        G[fraud.events]
+    end
+    A --> A1 --> C --> D --> E --> G
+    C -- sim → null --> D
+    C -- nao → auth --> D
+    B --> F -.- C

@@ -1,0 +1,20 @@
+flowchart LR
+    subgraph Input
+        A[transactions.raw]
+    end
+    subgraph Process
+        B[groupByKey]
+        C[windowedBy: Sliding 10min<br/>grace 2min]
+        D[aggregate: AccountAggregate<br/>totalAmount, count]
+        E[toStream]
+        F[filter: balance < -1000<br/>&& count >= 3]
+        G[map: to FraudAlert]
+    end
+    subgraph State
+        H[(WindowStore<br/>RocksDB)]
+    end
+    subgraph Output
+        I[fraud.events]
+    end
+    A --> B --> C --> D --> E --> F --> G --> I
+    C -.- H

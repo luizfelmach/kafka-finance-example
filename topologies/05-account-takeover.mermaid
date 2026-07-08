@@ -1,0 +1,12 @@
+flowchart LR
+    subgraph Input
+        A[auth.events]
+    end
+    subgraph Process
+        B[filter: password_change<br/>&& failedAttempts >= 3]
+        C[mapValues: to FraudAlert]
+    end
+    subgraph Output
+        D[fraud.events]
+    end
+    A --> B --> C --> D

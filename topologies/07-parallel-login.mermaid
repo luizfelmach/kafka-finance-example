@@ -1,0 +1,22 @@
+flowchart LR
+    subgraph Input
+        A[auth.events]
+    end
+    subgraph Process
+        A1[filter: eventType == login]
+        B[groupByKey]
+        C[windowedBy: Session 10s<br/>inactivity gap, no grace]
+        D[count]
+        E[suppress: untilWindowCloses<br/>unbounded]
+        F[toStream]
+        G[filter: count > 1]
+        H[map: to FraudAlert]
+    end
+    subgraph State
+        I[(SessionStore<br/>RocksDB)]
+    end
+    subgraph Output
+        J[fraud.events]
+    end
+    A --> A1 --> B --> C --> D --> E --> F --> G --> H --> J
+    C -.- I

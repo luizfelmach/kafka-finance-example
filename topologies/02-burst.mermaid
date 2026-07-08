@@ -1,0 +1,19 @@
+flowchart LR
+    subgraph Input
+        A[transactions.raw]
+    end
+    subgraph Process
+        B[groupByKey]
+        C[windowedBy: Tumbling 5min<br/>no grace]
+        D[count]
+        E[filter: count >= 5]
+        F[map: to FraudAlert]
+    end
+    subgraph State
+        G[(WindowStore)]
+    end
+    subgraph Output
+        H[fraud.events]
+    end
+    A --> B --> C --> D --> E --> F --> H
+    C -.- G
