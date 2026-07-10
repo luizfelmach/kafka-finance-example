@@ -23,8 +23,14 @@ public class AccountTakeoverTopology {
             .aggregate(
                 TakeoverState::new,
                 (key, auth, state) -> {
-                    if ("login".equals(auth.getEventType())) state.setLoginSeen(true);
-                    if ("password_change".equals(auth.getEventType())) state.setPwChangeSeen(true);
+                    if ("login".equals(auth.getEventType())) {
+                        state.setLoginSeen(true);
+                        state.setLoginTimestamp(auth.getTimestamp());
+                    }
+                    if ("password_change".equals(auth.getEventType())) {
+                        state.setPwChangeSeen(true);
+                        state.setPwChangeTimestamp(auth.getTimestamp());
+                    }
                     return state;
                 },
                 Materialized.<String, TakeoverState>as(Stores.persistentKeyValueStore("takeover-store"))
@@ -36,7 +42,9 @@ public class AccountTakeoverTopology {
             .stream(KafkaConfig.TOPIC_TRANSACTIONS_RAW, Consumed.with(Serdes.String(), JsonSerdes.transactionEvent()))
             .filter((key, tx) -> tx.getAmount() >= 5000)
             .join(authState, (tx, state) -> {
-                if (state.isLoginSeen() && state.isPwChangeSeen()) {
+                if (state.isLoginSeen() && state.isPwChangeSeen()
+                    && state.getLoginTimestamp() < state.getPwChangeTimestamp()
+                    && state.getPwChangeTimestamp() < tx.getTimestamp()) {
                     return FraudAlert.accountTakeover(tx);
                 }
                 return null;
