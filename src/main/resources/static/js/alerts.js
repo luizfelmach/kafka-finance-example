@@ -35,11 +35,16 @@
     const ts = new Date(alert.timestamp).toLocaleTimeString();
     const item = document.createElement('div');
     item.className = 'alert-item';
+    const metaParts = [];
+    if (alert.userId) metaParts.push(`user: ${alert.userId}`);
+    if (alert.accountId && alert.accountId !== alert.userId) metaParts.push(`account: ${alert.accountId}`);
+
     item.innerHTML = `
       <span class="alert-severity ${alert.severity}">${alert.severity}</span>
       <div class="alert-body">
         <div class="alert-type">${alert.alertType}</div>
         <div class="alert-desc">${alert.description}</div>
+        ${metaParts.length ? `<div class="alert-meta">${metaParts.join(' &middot; ')}</div>` : ''}
       </div>
       <span class="alert-time">${ts}</span>
     `;
@@ -83,9 +88,10 @@
     }).addTo(map);
 
     const time = new Date(alert.timestamp).toLocaleString();
+    const userLine = alert.userId ? `<br>User: ${alert.userId}` : '';
     marker.bindPopup(`
       <strong style="color:${color}">${alert.alertType}</strong><br>
-      ${alert.description}<br>
+      ${alert.description}${userLine}<br>
       <small>${time}</small>
     `);
 

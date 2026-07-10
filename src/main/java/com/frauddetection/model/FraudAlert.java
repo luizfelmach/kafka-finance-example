@@ -101,19 +101,21 @@ public class FraudAlert {
             "HIGH",
             "HIGH_VALUE_TRANSACTION",
             tx.getUserId(),
-            "Transaction of R$" + String.format("%.2f", tx.getAmount()) + " exceeds high-value threshold",
+            "Transaction of R$" + String.format("%.2f", tx.getAmount())
+                + " exceeds high-value threshold | device=" + tx.getDeviceId()
+                + " | ip=" + tx.getIpAddress(),
             System.currentTimeMillis()
         );
     }
 
-    public static FraudAlert transactionBurst(String accountId, long count, long windowStart, long windowEnd) {
+    public static FraudAlert transactionBurst(String userId, long count, long windowStart, long windowEnd) {
         return new FraudAlert(
             UUID.randomUUID().toString(),
-            accountId,
+            userId,
             "MEDIUM",
             "TRANSACTION_BURST",
-            null,
-            count + " transactions in 5-minute window",
+            userId,
+            count + " transactions in 5-minute window by user " + userId,
             System.currentTimeMillis()
         );
     }
@@ -153,7 +155,9 @@ public class FraudAlert {
             "CRITICAL",
             "ACCOUNT_TAKEOVER",
             tx.getUserId(),
-            "Account takeover: unknown device login → password change → R$" + String.format("%.2f", tx.getAmount()),
+            "Account takeover: account=" + tx.getAccountId()
+                + " | device=" + tx.getDeviceId()
+                + " | R$" + String.format("%.2f", tx.getAmount()),
             System.currentTimeMillis()
         );
     }

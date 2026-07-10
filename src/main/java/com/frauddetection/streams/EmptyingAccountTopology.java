@@ -43,7 +43,9 @@ public class EmptyingAccountTopology {
                 FraudAlert.emptyingAccount(
                     agg.getLastAccountId(),
                     agg.getLastUserId(),
-                    "Account drained. Balance: " + agg.getTotalAmount()
+                    "Account drained: account=" + agg.getLastAccountId()
+                    + " | user=" + agg.getLastUserId()
+                    + " | balance=R$" + agg.getTotalAmount()
                     + " in " + agg.getCount() + " transactions"
                 )
             ))

@@ -61,6 +61,7 @@ h2 { font-size: 1.15rem; margin: 1.5rem 0 0.75rem; color: #c9d1d9; }
 .alert-type { font-weight: 600; font-size: 0.85rem; }
 .alert-desc { font-size: 0.8rem; color: #8b949e; margin-top: 2px; }
 .alert-time { font-size: 0.7rem; color: #484f58; white-space: nowrap; }
+.alert-meta { font-size: 0.7rem; color: #58a6ff; margin-top: 3px; }
 .alert-controls {
   display: flex; align-items: center; gap: 1rem;
   margin-bottom: 0.75rem; font-size: 0.85rem;
