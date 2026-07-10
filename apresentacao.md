@@ -9,7 +9,7 @@ Detecção de fraudes financeiras em tempo real com Apache Kafka e Kafka Streams
 
 - Fraudes financeiras causam bilhões em prejuízo anualmente
 - Detecção precisa ser **em tempo real** — após a transação confirmada, já é tarde
-- Padrões suspeitos variam: valores altos, rajadas, dispositivos desconhecidos, múltiplos logins simultâneos, viagens impossíveis
+- Padrões suspeitos variam: valores altos, rajadas, dispositivos desconhecidos, troca de senha após ataque, viagens impossíveis
 - Cada tipo de fraude exige uma lógica de detecção diferente (janelas temporais, joins, geolocalização)
 - Solução tradicional: consumidores Kafka manuais — código repetitivo, sem janelamento nativo, difícil de escalar
 
@@ -19,16 +19,13 @@ Detecção de fraudes financeiras em tempo real com Apache Kafka e Kafka Streams
 ## A Solução
 
 - **Apache Kafka** — plataforma de eventos para capturar transações e autenticações
-- **Kafka Streams** — 9 topologias independentes analisando padrões em paralelo, cada uma com seu próprio `application.id`, grupo de consumidores e state stores
-- **Spring Boot** — API REST, SSE para alertas em tempo real, Interactive Queries para consultar state stores
+- **Kafka Streams** — 7 topologias independentes analisando padrões em paralelo, cada uma com seu próprio `application.id`, grupo de consumidores e state stores
+- **Spring Boot** — API REST, SSE para alertas em tempo real
 - **Frontend SPA** — dashboard, mapa Leaflet, simulador de fraudes, formulários de login/troca de senha
 - **CLI Sources** — produtores de eventos legítimos e fraudulentos para teste
 
 ```
- CLI SOURCES ──► Kafka Topics ──► 9 Streams ──► fraud.events ──► Spring Boot ──► Frontend
-                                          │
-                                    State Stores
-                                (Interactive Queries)
+ CLI SOURCES ──► Kafka Topics ──► 7 Streams ──► fraud.events ──► Spring Boot ──► Frontend
 ```
 
 ---
@@ -103,16 +100,14 @@ Detecção de fraudes financeiras em tempo real com Apache Kafka e Kafka Streams
 Cada topologia é um `KafkaStreams` independente com `application.id`, grupo de consumidores e state stores próprios.
 
 | # | Topologia | app.id suffix | Input | Operações Chave | State |
-|---|-----------|---------------|-------|----------------|-------|
+|--|-----------|---------------|-------|----------------|-------|
 | 1 | **HighAmount** | `-high-amount` | `transactions.raw` | filter | Stateless |
 | 2 | **Burst** | `-burst` | `transactions.raw` | groupBy + window + count | Tumbling 60s |
 | 3 | **UnknownDevice** | `-unknown-device` | `transactions.raw` + profiles | GlobalKTable join | GlobalKTable |
 | 4 | **PasswordChange** | `-password-change` | `auth.events` | filter | Stateless |
-| 5 | **AccountTakeover** | `-account-takeover` | `auth.events` | filter (failedAttempts) | Stateless |
+| 5 | **AccountTakeover** | `-account-takeover` | `auth.events` + `transactions.raw` | KTable aggregate + KStream-KTable join | KeyValueStore |
 | 6 | **EmptyingAccount** | `-emptying-account` | `transactions.raw` | groupBy + window + count | Tumbling 60s |
-| 7 | **ParallelLogin** | `-parallel-login` | `auth.events` | SessionWindow + Allen overlaps | Session Window |
-| 8 | **FarawayLogin** | `-faraway-login` | `auth.events` | Processor API + Haversine | KeyValueStore |
-| 9 | **UnderObservation** | `-under-observation` | `fraud.events` | groupBy + window + count | Tumbling 2min |
+| 7 | **FarawayLogin** | `-faraway-login` | `auth.events` | groupByKey + aggregate + flatMap + Haversine | KeyValueStore |
 
 ---
 ---
@@ -242,7 +237,7 @@ public static KafkaStreams build() {
 
 ## 4-5. PasswordChange + AccountTakeover — Eventos de Autenticação
 
-### PasswordChange (severity: HIGH)
+### PasswordChange (severity: LOW, sem marker no mapa)
 ```java
 public static KafkaStreams build() {
     StreamsBuilder builder = new StreamsBuilder();
@@ -252,29 +247,68 @@ public static KafkaStreams build() {
         .filter((key, auth) -> "password_change".equals(auth.getEventType()))
         .mapValues(auth -> FraudAlert.passwordChange(auth))
         .to(TOPIC_FRAUD_EVENTS,
-            Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
+            Produced.with(Serdes.String(), Serdes.String()));
     // ... build, start
 }
 ```
 
 ### AccountTakeover (severity: CRITICAL)
+
+Usa **KTable aggregate** + **KStream-KTable join** para correlacionar eventos de autenticação com transações de alto valor:
+
+```
+auth.events
+  └── filter: login ou password_change
+        └── groupByKey()
+              └── aggregate(TakeoverState)
+                    └── KTable: acompanha loginSeen e pwChangeSeen por usuário
+
+transactions.raw
+  └── filter: amount >= 5000
+        └── join(ktable)
+              └── filter: loginSeen && pwChangeSeen
+                    └── FraudAlert("ACCOUNT_TAKEOVER")
+                          └── to("fraud.events")
+```
+
 ```java
 public static KafkaStreams build() {
     StreamsBuilder builder = new StreamsBuilder();
-    builder
+
+    // KTable: estado de autenticação por usuário
+    KTable<String, TakeoverState> takeoverState = builder
         .stream(TOPIC_AUTH_EVENTS,
             Consumed.with(Serdes.String(), JsonSerdes.authEvent()))
-        .filter((key, auth) -> "password_change".equals(auth.getEventType())
-            && auth.getRecentFailedAttempts() != null
-            && auth.getRecentFailedAttempts() > 0)
-        .mapValues(auth -> FraudAlert.accountTakeover(auth))
+        .filter((key, auth) -> "login".equals(auth.getEventType())
+            || "password_change".equals(auth.getEventType()))
+        .groupByKey()
+        .aggregate(TakeoverState::new,
+            (key, auth, state) -> state.update(auth),
+            Materialized.<String, TakeoverState, KeyValueStore<Bytes, byte[]>>
+                as("takeover-store")
+                .withKeySerde(Serdes.String())
+                .withValueSerde(JsonSerdes.takeoverState()));
+
+    // KStream-KTable join: transações >= 5000 com takeoverState
+    builder
+        .stream(TOPIC_TRANSACTIONS_RAW,
+            Consumed.with(Serdes.String(), JsonSerdes.transactionEvent()))
+        .filter((key, tx) -> tx.getAmount() >= 5000.0)
+        .join(takeoverState, (tx, state) -> state,
+            (tx, state) -> {
+                if (state != null && state.isLoginSeen() && state.isPwChangeSeen()) {
+                    return FraudAlert.accountTakeover(tx);
+                }
+                return null;
+            })
+        .filter((key, alert) -> alert != null)
         .to(TOPIC_FRAUD_EVENTS,
             Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
     // ... build, start
 }
 ```
 
-AccountTakeover filtra password_change com `recentFailedAttempts > 0` — indicando que houve tentativas frustradas antes da troca de senha. É o alerta mais severo do sistema.
+AccountTakeover correlaciona login + troca de senha com transação de alto valor (≥ R$5.000).Alertas duplicados para o mesmo usuário são aceitos (não há filtro de alerta já enviado).
 
 ---
 ---
@@ -320,142 +354,75 @@ public static KafkaStreams build() {
 ---
 ---
 
-## 7. ParallelLogin — Logins Paralelos
+## 7. FarawayLogin — Viagem Impossível
 
-**Objetivo:** Detectar sessões simultâneas do mesmo usuário em dispositivos diferentes — um indicador clássico de conta comprometida.
+**Objetivo:** Detectar login geograficamente impossível — dois logins consecutivos com distância e velocidade incompatíveis com transporte real.
 
-Usa **Session Windows** (gap de 5 minutos) + **Álgebra de Allen** (relação _overlaps_).
+Usa **groupByKey + aggregate** (LoginPair POJO) + **toStream + flatMap** + **Fórmula de Haversine** — puro DSL, sem Processor API.
 
 ```
 auth.events
   └── filter(eventType == "login")
         └── groupByKey()
-              └── windowedBy(SessionWindows.with(Duration.ofMinutes(5)))
-                    └── aggregate(SessionState)
-                          └── para cada novo login:
-                                ├── state.hasActiveSession() AND
-                                ├── state.getDeviceId() != auth.getDeviceId() AND
-                                └── state.overlapsWith(auth.getTimestamp())
-                                      └── → FraudAlert("PARALLEL_LOGIN", severity=HIGH)
-                                            └── to("fraud.events")
-```
+              └── aggregate(LoginPair)
+                    └── KeyValueStore("last-login-store")
 
-```java
-// Pseudocódigo da lógica dentro do aggregate:
-// SessionState mantém: activeSession, deviceId, startTime, endTime
-// overlapsWith(ts) verifica: startTime <= ts <= endTime
-```
+LoginPair mantém: previous (AuthEvent) e current (AuthEvent)
 
----
----
-
-## 8. FarawayLogin — Viagem Impossível
-
-**Objetivo:** Detectar login geograficamente impossível — dois logins consecutivos com distância e velocidade incompatíveis com transporte real.
-
-Usa **Processor API** (`Transformer`) + **KeyValueStore** local (RocksDB) + **Fórmula de Haversine**.
-
-```
-auth.events
-  └── filter(eventType == "login")
-        └── transform(FarawayTransformer)
-              │
-              ▼
-        KeyValueStore("last-login-store")
-              │
-              ▼
-        Haversine(prev.lat, prev.lon, curr.lat, curr.lon)
-              │
-              ▼
-        velocity = distance / (deltaT / 3600.0)
-              │
-              ▼
-        if velocity > 900 km/h:
-          └── FraudAlert("FARAWAY_LOGIN", severity=HIGH)
-                └── to("fraud.events")
-```
-
-```java
-public class FarawayTransformer
-    implements Transformer<String, AuthEvent, KeyValue<String, FraudAlert>> {
-
-    private KeyValueStore<String, LastLogin> store;
-
-    public void init(ProcessorContext context) {
-        store = context.getStateStore("last-login-store");
-    }
-
-    public KeyValue<String, FraudAlert> transform(String key, AuthEvent auth) {
-        LastLogin last = store.get(key);
-        if (last != null) {
-            double dist = haversine(last.lat, last.lon,
-                auth.getLatitude(), auth.getLongitude());
-            long deltaT = auth.getTimestamp() - last.timestamp;
-            double speed = deltaT > 0 ? (dist / (deltaT / 3600.0)) : 0;
-
-            if (speed > 900.0) {
-                return KeyValue.pair(key,
-                    FraudAlert.farawayLogin(auth, dist, speed));
-            }
-        }
-        store.put(key, new LastLogin(auth.getLatitude(),
-            auth.getLongitude(), auth.getTimestamp()));
-        return null;
-    }
-}
-```
-
----
----
-
-## 9. UnderObservation — Conta sob Observação
-
-**Objetivo:** Detectar contas que estão sofrendo múltiplos ataques simultâneos — 3+ alertas de qualquer tipo para o mesmo `accountId` em 2 minutos.
-
-Alimenta-se do próprio tópico `fraud.events` (excluindo `UNDER_OBSERVATION` para evitar loop infinito).
-
-```
-fraud.events
-  └── filter(type != UNDER_OBSERVATION)
-        └── selectKey((k,v) -> v.getAccountId())
-              └── groupByKey()
-                    └── windowedBy(TumblingWindow 2min)
-                          └── count(Materialized.as("observation-store"))
-                                └── filter(count >= 3)
-                                      └── FraudAlert("UNDER_OBSERVATION", severity=LOW)
-                                            └── to("fraud.events")
+toStream + flatMap:
+  ├── previous == null? → apenas atualiza, não emite alerta
+  └── previous != null?
+        ├── Haversine(prev.lat, prev.lon, curr.lat, curr.lon)
+        ├── speed = distance / (deltaT / 3600.0)
+        └── speed > 900 km/h?
+              └── FraudAlert("FARAWAY_LOGIN", severity=HIGH)
+                    └── to("fraud.events")
 ```
 
 ```java
 public static KafkaStreams build() {
     StreamsBuilder builder = new StreamsBuilder();
+
     builder
-        .stream(TOPIC_FRAUD_EVENTS,
-            Consumed.with(Serdes.String(), JsonSerdes.fraudAlert()))
-        .filter((key, alert) -> !"ACCOUNT_UNDER_OBSERVATION"
-            .equals(alert.getAlertType()))
-        .selectKey((key, alert) -> alert.getAccountId())
+        .stream(TOPIC_AUTH_EVENTS,
+            Consumed.with(Serdes.String(), JsonSerdes.authEvent()))
+        .filter((key, auth) -> "login".equals(auth.getEventType()))
         .groupByKey()
-        .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(2)))
-        .count(Materialized.as("observation-store"))
+        .aggregate(LoginPair::new,
+            (key, auth, pair) -> pair.add(auth),
+            Materialized.<String, LoginPair, KeyValueStore<Bytes, byte[]>>
+                as("last-login-store")
+                .withKeySerde(Serdes.String())
+                .withValueSerde(JsonSerdes.loginPair()))
         .toStream()
-        .filter((key, count) -> count >= 3)
-        .mapValues(count -> FraudAlert.underObservation(
-            key.key(), null, "Account under observation: " + count + " alerts"))
+        .flatMap((key, pair) -> {
+            List<KeyValue<String, FraudAlert>> results = new ArrayList<>();
+            if (pair.getPrevious() != null) {
+                double dist = haversine(
+                    pair.getPrevious().getLatitude(), pair.getPrevious().getLongitude(),
+                    pair.getCurrent().getLatitude(), pair.getCurrent().getLongitude());
+                long deltaT = pair.getCurrent().getTimestamp()
+                    - pair.getPrevious().getTimestamp();
+                double speed = deltaT > 0 ? (dist / (deltaT / 3600.0)) : 0;
+                if (speed > 900.0) {
+                    results.add(KeyValue.pair(key,
+                        FraudAlert.farawayLogin(pair.getCurrent(), dist, speed)));
+                }
+            }
+            return results;
+        })
         .to(TOPIC_FRAUD_EVENTS,
             Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
     // ... build, start
 }
 ```
 
-Store `observation-store` é queryável via REST para visualizar contas com maior número de alertas.
-
 ---
 ---
 
 ## StreamsManager — Gerenciamento Unificado
 
-Spring Boot `@Component` que gerencia todas as 9 topologias dentro da mesma JVM.
+Spring Boot `@Component` que gerencia todas as 7 topologias dentro da mesma JVM.
 
 ```java
 @Component
@@ -472,58 +439,10 @@ public class StreamsManager {
     public void shutdown() {
         streams.forEach(KafkaStreams::close);
     }
-
-    public <T> ReadOnlyKeyValueStore<String, T> getStore(String storeName) {
-        for (KafkaStreams ks : streams) {
-            try {
-                return ks.store(StoreQueryParameters.fromNameAndType(
-                    storeName, QueryableStoreTypes.keyValueStore()));
-            } catch (IllegalArgumentException e) {
-                // store not found in this instance
-            }
-        }
-        throw new IllegalArgumentException("Store not found: " + storeName);
-    }
 }
 ```
 
-**Vantagens:** desligamento gracioso (`@PreDestroy`), busca unificada de state stores para Interactive Queries.
-
----
----
-
-## Interactive Queries — REST nas State Stores
-
-```java
-@RestController
-@RequestMapping("/api/queries")
-public class InteractiveQueryController {
-
-    @Autowired
-    private StreamsManager streamsManager;
-
-    @GetMapping("/faraway-logins/{userId}")
-    public LastLogin getFarawayLogin(@PathVariable String userId) {
-        var store = streamsManager.<LastLogin>getStore("last-login-store");
-        return store.get(userId);
-    }
-
-    @GetMapping("/observations")
-    public List<Map<String, Object>> getObservations() {
-        var store = streamsManager.<TxHistory>getStore("observation-store");
-        List<Map<String, Object>> result = new ArrayList<>();
-        try (var iter = store.all()) {
-            iter.forEachRemaining(entry -> {
-                if (entry.getValue().size() >= 5) {
-                    result.add(Map.of("userId", entry.getKey(),
-                        "txCount", entry.getValue().size()));
-                }
-            });
-        }
-        return result;
-    }
-}
-```
+**Vantagens:** desligamento gracioso (`@PreDestroy`), todas as topologias em uma única JVM.
 
 ---
 ---
@@ -536,9 +455,8 @@ Aplicação HTML + JS puro servida pelo Spring Boot em `src/main/resources/stati
 |--------|------|--------|
 | Dashboard | `#dashboard` | Stats por severidade + feed recente |
 | Live Alerts | `#alerts` | SSE feed + Leaflet map com markers |
-| Simulator | `#simulator` | 9 botões de cenário de fraude |
+| Simulator | `#simulator` | 7 botões de cenário de fraude |
 | Create Event | `#create` | Form Transaction + Login/Change Password |
-| Queries | `#queries` | Faraway-login e Observation stores |
 
 ### Leaflet Map
 
@@ -579,11 +497,8 @@ make account-takeover
 make high-amount
 # → Ver HIGH_VALUE_TRANSACTION
 
-make parallel-login
-# → Ver SUSPICIOUS_PARALLEL_LOGIN
-
-make under-observation
-# → Ver ACCOUNT_UNDER_OBSERVATION após 3+ alertas
+make emptying-account
+# → Ver EMPTYING_ACCOUNT no feed
 ```
 
 ---
@@ -593,7 +508,7 @@ make under-observation
 
 - Código completo: https://github.com/anomalyco/kafka-finance-example
 - Stack: Java 17 + Kafka 3.7.1 + Kafka Streams 3.8 + Spring Boot 3.2.5
-- 9 topologias independentes com `application.id` únicos
+- 7 topologias independentes com `application.id` únicos
 - Frontend SPA com Leaflet map + SSE + REST
 - CLI sources para todos os cenários de fraude
 

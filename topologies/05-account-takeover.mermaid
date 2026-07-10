@@ -1,12 +1,26 @@
 flowchart LR
     subgraph Input
         A[auth.events]
+        TX[transactions.raw]
     end
-    subgraph Process
-        B[filter: password_change<br/>&& failedAttempts >= 3]
-        C[mapValues: to FraudAlert]
+    subgraph KTable [groupByKey + aggregate]
+        B[filter: login<br/>or password_change]
+        C{login?}
+        D[set loginSeen=true]
+        E{password_change?}
+        F[set pwChangeSeen=true]
+        G[(takeover-store<br/>TakeoverState<br/>RocksDB)]
+    end
+    subgraph Join [KStream-KTable join]
+        H[filter: amount >= 5000]
+        I{loginSeen &&<br/>pwChangeSeen?}
+        J[FraudAlert.accountTakeover]
     end
     subgraph Output
-        D[fraud.events]
+        K[fraud.events]
     end
-    A --> B --> C --> D
+    A --> B --> C -- sim --> D --> G
+    C -- nao --> E -- sim --> F --> G
+    TX --> H --> I
+    G -.- I
+    I -- sim --> J --> K

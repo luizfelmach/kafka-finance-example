@@ -2,25 +2,23 @@ flowchart LR
     subgraph Input
         A[auth.events]
     end
-    subgraph Process [Processor API]
-        B[FarawayTransformer]
-        C{lastLogin exists?}
-        D[haversine distance]
-        E{speed > 500 km/h?}
-        F[forward FraudAlert]
-        G[store.put: update lastLogin]
+    subgraph Aggregate [groupByKey + aggregate]
+        B[filter: login]
+        C[aggregate LoginPair]
+        D[(last-login-store<br/>LoginPair<br/>RocksDB)]
     end
-    subgraph State
-        H[(last-login-store<br/>persistent KV<br/>RocksDB)]
+    subgraph FlatMap [toStream + flatMap]
+        E{previous == null?}
+        F[haversine distance]
+        G{speed > 900 km/h?}
+        H[FraudAlert.farawayLogin]
     end
     subgraph Output
         I[fraud.events]
     end
-    A --> B
-    B --> C
-    C -- sim --> D --> E -- sim --> F --> I
-    C -- nao --> G
-    E -- nao --> G
-    G --> B
-    H -.- C
-    H -.- G
+    A --> B --> C --> D
+    D --> E
+    E -- sim --> I
+    E -- nao --> F --> G
+    G -- sim --> H --> I
+    G -- nao --> I
