@@ -1,6 +1,6 @@
 # Kafka Finance Example — Fraud Detection System
 
-Real-time financial fraud detection using **Apache Kafka** as the event streaming platform and **Kafka Streams** as the CEP (Complex Event Processing) engine. The project simulates bank transactions and authentication events, detecting suspicious patterns through 9 independent Kafka Streams topologies using temporal windows, Allen's interval algebra, stateful aggregations, and geolocation analysis.
+Real-time financial fraud detection using **Apache Kafka** as the event streaming platform and **Kafka Streams** as the CEP (Complex Event Processing) engine. The project simulates bank transactions and authentication events, detecting suspicious patterns through 7 independent Kafka Streams topologies using temporal windows, stateful aggregations, stream-table joins, and geolocation analysis.
 
 ---
 
@@ -28,8 +28,8 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
 1. **Client profiles** — 100 simulated bank clients with accounts, trusted devices, IPs, and home coordinates.
 2. **Legitimate events** — continuous stream of normal transactions and logins.
 3. **Fraud simulation** — specialized CLI sources inject malicious behaviour (high-value txs, unknown devices, impossible travel, etc.).
-4. **Real-time detection** — 9 independent Kafka Streams topologies analyse patterns using joins, windows, state stores and Allen relations, producing alerts.
-5. **Frontend SPA** — real-time dashboard with Leaflet map, SSE live feed, fraud simulator, and state store queries.
+4. **Real-time detection** — 7 independent Kafka Streams topologies analyse patterns using the full Kafka Streams DSL: filters, windowed counts, GlobalKTable joins, KTable aggregations, `groupByKey().aggregate()`, `toStream().flatMap()`, and `KStream-KTable` joins.
+5. **Frontend SPA** — real-time dashboard with Leaflet map, SSE live feed, and fraud simulator.
 
 ---
 
@@ -38,11 +38,10 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
 ```
                         CLI SOURCES                          REST API
  ┌─────────────────┐  ┌──────────────────────────────────┐  ┌─────────────────┐
- │ LegitimateEvent │  │ Fraud Sources (9 types)           │  │ POST /api/events│
+ │ LegitimateEvent │  │ Fraud Sources (7 types)           │  │ POST /api/events│
  │   Producer      │  │ high-amount, burst, unknown-device│  │ /transaction    │
  └────────┬────────┘  │ password-change, account-takeover,│  │ /auth           │
-          │           │ emptying-account, parallel-login, │  └────────┬────────┘
-          │           │ faraway-login, under-observation  │           │
+          │           │ emptying-account, faraway-login  │  └────────┬────────┘
           │           └────────┬────────┬────────┬────────┘           │
           ▼                    ▼        ▼        ▼                    ▼
  ┌──────────────┐   ┌──────────────┐   ┌────────────────┐   ┌──────────────────┐
@@ -54,7 +53,7 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
         └──────────────────┼───────────────────┼─────────────────────┘
                            ▼                   ▼
               ┌──────────────────────────────────────────────────────┐
-              │          KAFKA STREAMS (9 independent instances)      │
+              │          KAFKA STREAMS (7 independent instances)      │
               │                                                      │
               │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
               │  │ HighAmount   │ │ Burst        │ │ UnknownDevice│  │
@@ -66,14 +65,13 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
               │  │ app.id=...   │ │ app.id=...   │ │ app.id=...   │  │
               │  │ -password-c. │ │ -account-t.  │ │ -emptying-a. │  │
               │  └──────────────┘ └──────────────┘ └──────────────┘  │
-              │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
-              │  │ ParallelLogin│ │ FarawayLogin │ │ UnderObs.    │  │
-              │  │ app.id=...   │ │ app.id=...   │ │ app.id=...   │  │
-              │  │ -parallel-l. │ │ -faraway-l.  │ │ -under-obser.│  │
-              │  └──────────────┘ └──────────────┘ └──────────────┘  │
+              │  ┌──────────────┐                                     │
+              │  │ FarawayLogin │                                     │
+              │  │ app.id=...   │                                     │
+              │  │ -faraway-l.  │                                     │
+              │  └──────────────┘                                     │
               │                                                      │
-              │  State Stores: last-login-store, observation-store   │
-              │  Interactive Queries via StreamsManager               │
+              │  State Stores: last-login-store, takeover-store      │
               └──────────────────────┬───────────────────────────────┘
                                      │
                                      ▼ (alerts)
@@ -94,8 +92,8 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
 
 | Mode | Command | What runs | Use case |
 |------|---------|-----------|----------|
-| **All-in-one** | `make spring-boot` | Spring Boot + StreamsManager (9 topologies) + SSE + REST + frontend | Development, demo |
-| **Standalone** | `make streams` | 9 topologies in a single JVM (no web server) | Testing streams only |
+| **All-in-one** | `make spring-boot` | Spring Boot + StreamsManager (7 topologies) + SSE + REST + frontend | Development, demo |
+| **Standalone** | `make streams` | 7 topologies in a single JVM (no web server) | Testing streams only |
 | **Separate** | Terminal 1: `make streams` + Terminal 2: `make spring-boot` | Streams + web backend in separate JVMs | Debugging, scaled |
 
 ---
@@ -106,7 +104,7 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
 |-----------|---------|---------|
 | Java | 17 | Core language |
 | Apache Kafka | 3.7.1 / 3.8.0 | Event streaming platform |
-| Kafka Streams | 3.8.0 | Stream processing (CEP) |
+| Kafka Streams | 3.8.0 | Stream processing (CEP) — DSL only (no Processor API) |
 | Spring Boot | 3.2.5 | Web backend (REST, SSE, static files) |
 | Maven | — | Build & dependencies |
 | Docker / Docker Compose | — | Local 3-broker Kafka cluster |
@@ -142,7 +140,7 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
     │   ├── TransactionEvent.java   # Bank transaction (PIX, CRED, DEB)
     │   ├── AuthEvent.java          # Login / password change with geolocation
     │   ├── FraudAlert.java         # Fraud alert with severity, type, geo
-    │   └── GeoLocation.java        # Haversine distance helper
+    │   └── GeoLocation.java        # Coordinates for Haversine distance
     ├── serialization/
     │   ├── JsonSerializer.java     # Generic JSON serializer
     │   ├── JsonDeserializer.java   # Generic JSON deserializer
@@ -156,31 +154,25 @@ Real-time financial fraud detection using **Apache Kafka** as the event streamin
     │   ├── PasswordChangeFraudProducer.java
     │   ├── AccountTakeoverFraudProducer.java
     │   ├── EmptyingAccountFraudProducer.java
-    │   ├── ParallelLoginFraudProducer.java
-    │   ├── FarawayLoginFraudProducer.java
-    │   └── UnderObservationFraudProducer.java
-    ├── streams/                    # 9 independent Kafka Streams topologies
+    │   └── FarawayLoginFraudProducer.java
+    ├── streams/                    # 7 independent Kafka Streams topologies
     │   ├── FraudDetectionTopology.java   # Factory: buildAll() returns List<KafkaStreams>
     │   ├── FraudDetectionApp.java        # Standalone entry point
     │   ├── HighAmountTopology.java       # Single tx > R$50,000
     │   ├── BurstTopology.java            # 5+ txs in 60s
     │   ├── UnknownDeviceTopology.java    # GlobalKTable join for untrusted devices
     │   ├── PasswordChangeTopology.java   # Password change event
-    │   ├── AccountTakeoverTopology.java  # Login → pw change → high tx
+    │   ├── AccountTakeoverTopology.java  # 3-step: login → pwChange → high tx
     │   ├── EmptyingAccountTopology.java  # 5+ high txs in 60s
-    │   ├── ParallelLoginTopology.java    # Session window + Allen overlaps
-    │   ├── FarawayLoginTopology.java     # Processor API + KeyValueStore + Allen before
-    │   ├── UnderObservationTopology.java # 3+ alerts in 2min
-    │   ├── StreamsManager.java           # @Component: starts/stop all, provides stores
+    │   ├── FarawayLoginTopology.java     # KTable aggregate + flatMap + Haversine
+    │   ├── StreamsManager.java           # @Component: starts/stop all topologies
     │   ├── AccountAggregate.java         # State class for EmptyingAccount
-    │   ├── TxHistory.java                # State class for HighAmount / UnderObservation
-    │   ├── LastLogin.java                # State class for FarawayLogin
-    │   └── FarawayTransformer.java       # Custom Processor API transformer
+    │   ├── LoginPair.java                # State class for FarawayLogin
+    │   └── TakeoverState.java            # State class for AccountTakeover
     ├── web/
     │   ├── FraudDetectionApplication.java    # Spring Boot main
     │   ├── EventController.java              # POST /api/events/{transaction,auth}
-    │   ├── AlertSSEController.java           # GET /api/alerts/stream (SSE)
-    │   └── InteractiveQueryController.java   # GET /api/queries/*
+    │   └── AlertSSEController.java           # GET /api/alerts/stream (SSE)
     └── utils/
         ├── ClientGenerator.java    # Generates clients.json
         ├── ClientLoader.java       # Reads clients.json
@@ -192,8 +184,7 @@ src/main/resources/static/          # Frontend SPA (served by Spring Boot)
 └── js/
     ├── app.js                      # Router, nav, stats
     ├── alerts.js                   # SSE + Leaflet map
-    ├── events.js                   # Fraud simulator + manual forms
-    └── queries.js                  # State store queries (faraway-login, observations)
+    └── events.js                   # Fraud simulator + manual forms
 ```
 
 ---
@@ -213,7 +204,7 @@ make clients
 # 4. Build the project
 make build
 
-# 5. Start everything (Spring Boot + 9 topologies + frontend)
+# 5. Start everything (Spring Boot + 7 topologies + frontend)
 make spring-boot
 
 # 6. Open http://localhost:8080
@@ -278,13 +269,13 @@ Produces `target/kafka-finance-example-1.0-SNAPSHOT.jar`.
 ```bash
 make spring-boot
 ```
-Spring Boot starts on port 8080, serving the frontend SPA, REST API, SSE stream, and all 9 topologies via `StreamsManager`.
+Spring Boot starts on port 8080, serving the frontend SPA, REST API, SSE stream, and all 7 topologies via `StreamsManager`.
 
 **Standalone streams only:**
 ```bash
 make streams
 ```
-Runs all 9 topologies without the web server. Useful for headless testing.
+Runs all 7 topologies without the web server. Useful for headless testing.
 
 ### 6. Observe alerts
 
@@ -331,16 +322,14 @@ Or open `http://localhost:8080` and navigate to **Live Alerts**.
 | `make password-change` | Password change event |
 | `make account-takeover` | Unknown login → pw change → high tx |
 | `make emptying-account` | 4 high-value transactions |
-| `make parallel-login` | Logins from SP + Recife on different devices |
-| `make faraway-login` | Login from SP → Tokyo in 500ms |
-| `make under-observation` | Re-trigger alerts to trigger observation |
+| `make faraway-login` | Login SP → Tokyo in 500ms (requires previous login in state store) |
 
 ### Streams + Backend
 
 | Command | Description |
 |---------|-------------|
-| `make spring-boot` | Spring Boot (port 8080) + 9 topologies + frontend |
-| `make streams` | Standalone streams (9 topologies, no web) |
+| `make spring-boot` | Spring Boot (port 8080) + 7 topologies + frontend |
+| `make streams` | Standalone streams (7 topologies, no web) |
 | `make listen-alerts` | Console consumer on `fraud.events` |
 
 ### Kafka Utils
@@ -395,7 +384,7 @@ Or open `http://localhost:8080` and navigate to **Live Alerts**.
   "alertType": "ACCOUNT_TAKEOVER",
   "userId": "u-000",
   "accountId": "acc-u-000-0",
-  "description": "Password change after 3 failed attempts",
+  "description": "Account takeover: unknown device login → password change → R$55000.00",
   "severity": "CRITICAL",
   "timestamp": 1715712000000,
   "latitude": -20.3,
@@ -403,7 +392,7 @@ Or open `http://localhost:8080` and navigate to **Live Alerts**.
 }
 ```
 
-`latitude` / `longitude` are present only for alerts based on `AuthEvent` (unknown device, password change, account takeover, faraway login). They are rendered on the Leaflet map in the frontend.
+`latitude` / `longitude` are present only for alerts derived from `AuthEvent` (unknown device, account takeover, faraway login). `PASSWORD_CHANGE` alerts have fixed severity **LOW** and no geo coordinates (not shown on map). Alerts derived from transactions (high value, burst, emptying account) also have no geo coordinates.
 
 ---
 
@@ -417,11 +406,9 @@ Each topology runs as an **independent `KafkaStreams` instance** with its own `a
 | 2 | Burst | `fraud-detection-burst` | `transactions.raw` | 5+ txs in 60s window | Tumbling Window |
 | 3 | UnknownDevice | `fraud-detection-unknown-device` | `transactions.raw` + `clients.profiles` | GlobalKTable join: device not in trusted list | GlobalKTable |
 | 4 | PasswordChange | `fraud-detection-password-change` | `auth.events` | `password_change` event | Stateless |
-| 5 | AccountTakeover | `fraud-detection-account-takeover` | `auth.events` | Password change after failed attempts | Stateless |
+| 5 | AccountTakeover | `fraud-detection-account-takeover` | `auth.events` + `transactions.raw` | KTable aggregate (login+pwChange) + KStream-KTable join (high tx) | KeyValueStore (`takeover-store`) |
 | 6 | EmptyingAccount | `fraud-detection-emptying-account` | `transactions.raw` | 5+ txs ≥ R$1,000 in 60s | Tumbling Window |
-| 7 | ParallelLogin | `fraud-detection-parallel-login` | `auth.events` | Simultaneous logins, different devices (Allen: overlaps) | Session Window |
-| 8 | FarawayLogin | `fraud-detection-faraway-login` | `auth.events` | Impossible travel speed > 900 km/h (Allen: before) | KeyValueStore (`last-login-store`) |
-| 9 | UnderObservation | `fraud-detection-under-observation` | `fraud.events` | 3+ alerts per accountId in 2min | Tumbling Window (`observation-store`) |
+| 7 | FarawayLogin | `fraud-detection-faraway-login` | `auth.events` | KTable aggregate (consecutive LoginPair) + toStream + flatMap: speed > 900 km/h | KeyValueStore (`last-login-store`) |
 
 ### 1. HighAmount
 
@@ -470,18 +457,28 @@ auth.events
               └── to fraud.events
 ```
 
-Triggers `PASSWORD_CHANGE` (severity: HIGH) on any `password_change` auth event.
+Triggers `PASSWORD_CHANGE` (severity: LOW) on any `password_change` auth event. Not shown on the Leaflet map (no geo coordinates).
 
 ### 5. AccountTakeover
 
 ```
 auth.events
-  └── filter(eventType == "password_change" AND recentFailedAttempts > 0)
-        └── map → FraudAlert.accountTakeover(auth)
-              └── to fraud.events
+  └── groupByKey()
+        └── aggregate(TakeoverState, ...) → KTable<String, TakeoverState>
+              login → loginSeen=true
+              password_change → pwChangeSeen=true
+
+transactions.raw
+  └── filter(amount >= 5000) → KStream<String, TransactionEvent>
+        └── join(authState KTable) → (tx, state)
+              ├── loginSeen && pwChangeSeen → FraudAlert.accountTakeover(tx)
+              └── otherwise → null
+                    └── filter(null) → fraud.events
 ```
 
-Triggers `ACCOUNT_TAKEOVER` (severity: CRITICAL) when a password change follows recent failed login attempts — the most severe alert.
+Uses a `KTable` aggregate (`groupByKey().aggregate()`) on `auth.events` to track which users have completed both steps (login + password change). Then joins this KTable with high-value transactions (`KStream-KTable` join). When a user has both flags set and performs a transaction of R$5,000+, triggers `ACCOUNT_TAKEOVER` (severity: CRITICAL).
+
+- State store: `takeover-store` (RocksDB, persistent)
 
 ### 6. EmptyingAccount
 
@@ -498,65 +495,25 @@ transactions.raw
 
 Triggers `EMPTYING_ACCOUNT` (severity: HIGH) when 5+ transactions of at least R$1,000 occur in 60 seconds for the same account.
 
-### 7. ParallelLogin
+### 7. FarawayLogin
 
 ```
 auth.events
   └── filter(eventType == "login")
         └── groupByKey()
-              └── windowedBy(SessionWindows.with(Duration.ofMinutes(5)))
-                    └── aggregate(SessionState, ...)
-                          └── filter(overlapping sessions, different devices)
-                                └── map → FraudAlert.parallelLogin(...)
-                                      └── to fraud.events
+              └── aggregate(LoginPair, ...) → KTable<String, LoginPair>
+                    pair.previous = (old) pair.current
+                    pair.current = newAuth
+                      └── toStream()
+                            └── flatMap → if previous != null && speed > 900 km/h
+                                  └── FraudAlert.farawayLogin(curr, distance, speed)
+                                        └── to fraud.events
 ```
 
-Uses **Session Windows** with a 5-minute inactivity gap. When two login sessions overlap in time (Allen: overlaps or during) from **different devices** for the same user, triggers `SUSPICIOUS_PARALLEL_LOGIN` (severity: HIGH).
+Uses a `KTable` aggregate (`groupByKey().aggregate()`) to track consecutive logins per user as a `LoginPair` (previous, current). The `toStream().flatMap()` computes the Haversine distance and travel speed between consecutive logins. If speed exceeds 900 km/h, triggers `FARAWAY_LOGIN` (severity: HIGH).
 
-### 8. FarawayLogin
-
-```
-auth.events
-  └── filter(eventType == "login")
-        └── transform(FarawayTransformer)
-              └── KeyValueStore("last-login-store")
-                    └── if velocity > 900 km/h → FraudAlert.farawayLogin(...)
-                          └── to fraud.events
-```
-
-Uses **Processor API** (`Transformer`) with a local RocksDB `KeyValueStore`. Computes Haversine distance between consecutive logins and checks if the travel speed exceeds 900 km/h (Allen: before). Triggers `SUSPICIOUS_FARAWAY_LOGIN` (severity: HIGH).
-
-- State store: `last-login-store` (queryable via REST)
+- State store: `last-login-store` (RocksDB, persistent)
 - Example: SP to Tokyo in 500ms ≈ 133,000,000 km/h → alert.
-
-### 9. UnderObservation
-
-```
-fraud.events
-  └── filter(type != UNDER_OBSERVATION)
-        └── selectKey((k,v) → v.getAccountId())
-              └── groupByKey()
-                    └── windowedBy(TumblingWindow.of(Duration.ofMinutes(2)))
-                          └── count()
-                                └── filter(count >= 3)
-                                      └── map → FraudAlert.underObservation(...)
-                                            └── to fraud.events
-```
-
-Feeds on its own output topic (minus its own alert type). When 3+ alerts fire for the same `accountId` in a 2-minute window, triggers `ACCOUNT_UNDER_OBSERVATION` (severity: LOW).
-
-- State store: `observation-store` (queryable via REST)
-
-### Interactive Queries
-
-The `StreamsManager` Spring Bean manages all 9 `KafkaStreams` instances. It exposes `getStore(storeName)` to find a state store across all instances.
-
-Available queryable stores:
-
-| Store | Topology | Query endpoint |
-|-------|----------|----------------|
-| `last-login-store` | FarawayLogin | `GET /api/queries/faraway-logins/{userId}` |
-| `observation-store` | UnderObservation | `GET /api/queries/observations` |
 
 ---
 
@@ -577,13 +534,6 @@ All endpoints are served on `http://localhost:8080`.
 |--------|----------|-------------|
 | `GET` | `/api/alerts/stream` | SSE — real-time fraud alerts (event name: `alert`) |
 
-### Interactive Queries
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/queries/faraway-logins/{userId}` | Last login location from `last-login-store` |
-| `GET` | `/api/queries/observations` | Accounts under observation with tx counts |
-
 ---
 
 ## Frontend
@@ -598,7 +548,6 @@ A pure HTML + JS SPA (no framework), served by Spring Boot from `src/main/resour
 | Live Alerts | `#alerts` | SSE alert feed + Leaflet map with geo markers |
 | Simulator | `#simulator` | One-click fraud scenario buttons |
 | Create Event | `#create` | Transaction form + simulated Login / Change Password UI |
-| Queries | `#queries` | Query faraway-login store and observation store |
 
 ### Live Alerts Map
 
@@ -611,6 +560,17 @@ A pure HTML + JS SPA (no framework), served by Spring Boot from `src/main/resour
 - Click for popup: alert type, description, timestamp
 - Clear button resets feed + markers
 - Auto-reconnects on SSE disconnect
+
+### Simulator
+
+One-click buttons for each fraud scenario:
+- **High Amount** — single tx > R$50,000
+- **Burst** — 5 rapid txs from the same user (fixed: previously used different users)
+- **Unknown Device** — auth from unknown device
+- **Password Change** — password change event
+- **Account Takeover** — login (unknown device) → password change → high-value tx
+- **Emptying Account** — 4 high-value txs from the same user
+- **Faraway Login** — 2 logins (SP + random destination) to trigger impossible travel
 
 ### Create Event: Login
 
@@ -654,11 +614,9 @@ Each CLI source injects a specific fraud pattern:
 | `BurstTransactionFraudProducer` | 10 rapid transactions |
 | `UnknownDeviceFraudProducer` | Auth with random deviceId |
 | `PasswordChangeFraudProducer` | Login from unknown device → password change |
-| `AccountTakeoverFraudProducer` | Unknown login → pw change (3 failed attempts) → high tx |
+| `AccountTakeoverFraudProducer` | Unknown login → pw change → high-value tx |
 | `EmptyingAccountFraudProducer` | 4 transactions of R$3,000–5,000 |
-| `ParallelLoginFraudProducer` | Login SP + Recife on different devices |
 | `FarawayLoginFraudProducer` | Login SP → Tokyo in 500ms |
-| `UnderObservationFraudProducer` | Re-reads fraud.events and re-publishes to trigger observation |
 
 ---
 
