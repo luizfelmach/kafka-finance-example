@@ -5,7 +5,7 @@ import com.frauddetection.model.FraudAlert;
 import com.frauddetection.model.GeoLocation;
 import com.frauddetection.model.TransactionEvent;
 import com.frauddetection.streams.AccountAggregate;
-import com.frauddetection.streams.LastLogin;
+import com.frauddetection.streams.LoginPair;
 import com.frauddetection.streams.TakeoverState;
 import com.frauddetection.utils.ClientProfile;
 import java.math.BigDecimal;
@@ -25,8 +25,8 @@ public class JsonSerdes {
         return new JsonSerde<>(FraudAlert.class);
     }
 
-    public static Serde<LastLogin> lastLogin() {
-        return new JsonSerde<>(LastLogin.class);
+    public static Serde<LoginPair> loginPair() {
+        return new JsonSerde<>(LoginPair.class);
     }
 
     public static Serde<BigDecimal> bigDecimal() {
