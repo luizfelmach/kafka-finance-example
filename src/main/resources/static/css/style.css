@@ -130,4 +130,11 @@ h2 { font-size: 1.15rem; margin: 1.5rem 0 0.75rem; color: #c9d1d9; }
 .query-row input { flex: 1; max-width: 300px; padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #e1e4e8; }
 .query-result { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 0.75rem; min-height: 60px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; }
 .alert-map { height: 300px; border-radius: 8px; border: 1px solid #30363d; margin-bottom: 1rem; z-index: 1; }
+.nav-toggle { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; user-select: none; margin: 0 0.5rem; }
+.nav-toggle input { display: none; }
+.nav-toggle-track { width: 32px; height: 16px; background: #484f58; border-radius: 8px; position: relative; transition: background 0.2s; }
+.nav-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: #e1e4e8; border-radius: 50%; transition: transform 0.2s; }
+.nav-toggle input:checked + .nav-toggle-track { background: #3fb950; }
+.nav-toggle input:checked + .nav-toggle-track::after { transform: translateX(16px); }
+.nav-toggle-label { font-size: 0.8rem; color: #8b949e; }
 .leaflet-container { background: #161b22; }

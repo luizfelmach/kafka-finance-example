@@ -281,8 +281,44 @@
     });
   }
 
+  let simTimer = null;
+  let simRunning = false;
+
+  async function simLoop() {
+    while (simRunning) {
+      const isTx = Math.random() < 0.7;
+      try {
+        if (isTx) {
+          await postTx({});
+        } else {
+          await postAuth({ eventType: 'login' });
+        }
+      } catch (_) {}
+      if (simRunning) {
+        await sleep(500 + Math.random() * 1000);
+      }
+    }
+  }
+
+  function startContinuousSim() {
+    if (simRunning) return;
+    simRunning = true;
+    log('Continuous simulation started', 'info');
+    simLoop();
+  }
+
+  function stopContinuousSim() {
+    simRunning = false;
+    if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+    log('Continuous simulation stopped', 'info');
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     initSimulator();
     initForms();
+    document.getElementById('continuousSim').addEventListener('change', e => {
+      if (e.target.checked) startContinuousSim();
+      else stopContinuousSim();
+    });
   });
 })();
