@@ -136,27 +136,25 @@ public class FraudAlert {
         return new FraudAlert(
             UUID.randomUUID().toString(),
             auth.getUserId(),
-            "HIGH",
+            "LOW",
             "PASSWORD_CHANGE",
             auth.getUserId(),
             "Password changed by user " + auth.getUserId(),
             System.currentTimeMillis(),
-            auth.getLatitude(),
-            auth.getLongitude()
+            null,
+            null
         );
     }
 
-    public static FraudAlert accountTakeover(AuthEvent auth) {
+    public static FraudAlert accountTakeover(TransactionEvent tx) {
         return new FraudAlert(
             UUID.randomUUID().toString(),
-            auth.getUserId(),
+            tx.getAccountId(),
             "CRITICAL",
             "ACCOUNT_TAKEOVER",
-            auth.getUserId(),
-            "Password change after " + auth.getRecentFailedAttempts() + " failed attempts",
-            System.currentTimeMillis(),
-            auth.getLatitude(),
-            auth.getLongitude()
+            tx.getUserId(),
+            "Account takeover: unknown device login → password change → R$" + String.format("%.2f", tx.getAmount()),
+            System.currentTimeMillis()
         );
     }
 
@@ -166,18 +164,6 @@ public class FraudAlert {
             accountId,
             "HIGH",
             "EMPTYING_ACCOUNT",
-            userId,
-            description,
-            System.currentTimeMillis()
-        );
-    }
-
-    public static FraudAlert parallelLogin(String userId, String description) {
-        return new FraudAlert(
-            UUID.randomUUID().toString(),
-            userId,
-            "HIGH",
-            "PARALLEL_LOGIN",
             userId,
             description,
             System.currentTimeMillis()
@@ -195,18 +181,6 @@ public class FraudAlert {
             System.currentTimeMillis(),
             auth.getLatitude(),
             auth.getLongitude()
-        );
-    }
-
-    public static FraudAlert underObservation(String accountId, String userId, String description) {
-        return new FraudAlert(
-            UUID.randomUUID().toString(),
-            accountId,
-            "LOW",
-            "UNDER_OBSERVATION",
-            userId,
-            description,
-            System.currentTimeMillis()
         );
     }
 

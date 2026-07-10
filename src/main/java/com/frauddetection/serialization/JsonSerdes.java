@@ -6,7 +6,7 @@ import com.frauddetection.model.GeoLocation;
 import com.frauddetection.model.TransactionEvent;
 import com.frauddetection.streams.AccountAggregate;
 import com.frauddetection.streams.LastLogin;
-import com.frauddetection.streams.TxHistory;
+import com.frauddetection.streams.TakeoverState;
 import com.frauddetection.utils.ClientProfile;
 import java.math.BigDecimal;
 import org.apache.kafka.common.serialization.Serde;
@@ -29,10 +29,6 @@ public class JsonSerdes {
         return new JsonSerde<>(LastLogin.class);
     }
 
-    public static Serde<TxHistory> txHistory() {
-        return new JsonSerde<>(TxHistory.class);
-    }
-
     public static Serde<BigDecimal> bigDecimal() {
         return new JsonSerde<>(BigDecimal.class);
     }
@@ -47,5 +43,9 @@ public class JsonSerdes {
 
     public static Serde<GeoLocation> geoLocation() {
         return new JsonSerde<>(GeoLocation.class);
+    }
+
+    public static Serde<TakeoverState> takeoverState() {
+        return new JsonSerde<>(TakeoverState.class);
     }
 }

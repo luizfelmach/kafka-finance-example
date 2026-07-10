@@ -14,9 +14,7 @@ public class FraudDetectionTopology {
             PasswordChangeTopology.build(),
             AccountTakeoverTopology.build(),
             EmptyingAccountTopology.build(),
-            ParallelLoginTopology.build(),
-            FarawayLoginTopology.build(),
-            UnderObservationTopology.build()
+            FarawayLoginTopology.build()
         );
     }
 }

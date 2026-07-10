@@ -8,18 +8,25 @@ import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.state.KeyValueBytesStoreSupplier;
+import org.apache.kafka.streams.state.Stores;
 
 public class AccountTakeoverTopology {
 
     public static KafkaStreams build() {
         StreamsBuilder builder = new StreamsBuilder();
+        KeyValueBytesStoreSupplier storeSupplier = Stores.persistentKeyValueStore("takeover-store");
+
+        builder.addStateStore(Stores.keyValueStoreBuilder(
+            storeSupplier, Serdes.String(), JsonSerdes.takeoverState()));
+
         builder
             .stream(KafkaConfig.TOPIC_AUTH_EVENTS, Consumed.with(Serdes.String(), JsonSerdes.authEvent()))
-            .filter((key, auth) -> {
-                int failedAttempts = auth.getRecentFailedAttempts() != null ? auth.getRecentFailedAttempts() : 0;
-                return "password_change".equals(auth.getEventType()) && failedAttempts >= 3;
-            })
-            .mapValues(auth -> FraudAlert.accountTakeover(auth))
+            .process(() -> new TakeoverAuthProcessor(), "takeover-store");
+
+        builder
+            .stream(KafkaConfig.TOPIC_TRANSACTIONS_RAW, Consumed.with(Serdes.String(), JsonSerdes.transactionEvent()))
+            .process(() -> new TakeoverTxProcessor(), "takeover-store")
             .to(KafkaConfig.TOPIC_FRAUD_EVENTS, Produced.with(Serdes.String(), JsonSerdes.fraudAlert()));
 
         KafkaStreams streams = new KafkaStreams(builder.build(), KafkaConfig.streamsProps("fraud-detection-account-takeover"));

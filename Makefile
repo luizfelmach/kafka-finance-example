@@ -31,12 +31,10 @@ help: ## Show this help message
 	@printf "  \033[36m%-14s\033[0m %s\n" "password-change" "Simulate password change fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "account-takeover" "Simulate account takeover fraud"
 	@printf "  \033[36m%-14s\033[0m %s\n" "emptying-account" "Simulate emptying account fraud"
-	@printf "  \033[36m%-14s\033[0m %s\n" "parallel-login" "Simulate parallel login fraud (SP + Recife)"
-	@printf "  \033[36m%-14s\033[0m %s\n" "faraway-login" "Simulate faraway login fraud (SP + Tokyo)"
-	@printf "  \033[36m%-14s\033[0m %s\n" "under-observation" "Simulate under observation detection"
+	@printf "  \033[36m%-14s\033[0m %s\n" "faraway-login" "Simulate faraway login fraud (SP + destination)"
 	@echo ""
 	@echo "Spring Boot (Backend + Streams)"
-	@printf "  \033[36m%-14s\033[0m %s\n" "spring-boot" "Start Spring Boot backend (port 8080) with all 9 topologies"
+	@printf "  \033[36m%-14s\033[0m %s\n" "spring-boot" "Start Spring Boot backend (port 8080) with all 7 topologies"
 	@echo ""
 	@echo "Kafka Streams (Standalone)"
 	@printf "  \033[36m%-14s\033[0m %s\n" "streams" "Start Kafka Streams FraudDetectionApp (standalone)"
@@ -83,7 +81,7 @@ simulate: build ## Run LegitimateEventProducer
 	@echo "→ Running LegitimateEventProducer..."
 	java -cp $(JAVA_JAR) com.frauddetection.sources.LegitimateEventProducer
 
-streams: build ## Start Kafka Streams FraudDetectionApp (all 9 topologies, standalone)
+streams: build ## Start Kafka Streams FraudDetectionApp (all 7 topologies, standalone)
 	@echo "→ Starting FraudDetectionApp (Kafka Streams)..."
 	java -cp $(JAVA_JAR) com.frauddetection.streams.FraudDetectionApp
 
@@ -143,16 +141,8 @@ emptying-account: build ## Simulate emptying account fraud (combine multiple fra
 	@echo "→ Running EmptyingAccountFraudSource..."
 	java -cp $(JAVA_JAR) com.frauddetection.sources.EmptyingAccountFraudProducer
 
-parallel-login: build ## Simulate parallel login fraud (SP + Recife)
-	@echo "→ Running ParallelLoginFraudSource..."
-	java -cp $(JAVA_JAR) com.frauddetection.sources.ParallelLoginFraudProducer
-
-faraway-login: build ## Simulate faraway login fraud (SP + Tokyo)
+faraway-login: build ## Simulate faraway login fraud (SP + random destination)
 	@echo "→ Running FarawayLoginFraudSource..."
 	java -cp $(JAVA_JAR) com.frauddetection.sources.FarawayLoginFraudProducer
 
-under-observation: build ## Simulate under observation detection
-	@echo "→ Running UnderObservationFraudSource..."
-	java -cp $(JAVA_JAR) com.frauddetection.sources.UnderObservationFraudProducer
-
-.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account parallel-login faraway-login under-observation streams listen-alerts spring-boot
+.PHONY: help up down restart build clean clients simulate listen topics topics-view topics-describe high-amount burst unknown-device password-change account-takeover emptying-account faraway-login streams listen-alerts spring-boot

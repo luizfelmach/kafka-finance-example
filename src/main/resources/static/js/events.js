@@ -27,8 +27,9 @@
       id: 'burst', label: 'Burst',
       desc: '5 rapid transactions',
       run: async () => {
+        const u = uid();
         for (let i = 0; i < 5; i++) {
-          await postTx({ amount: 150 + Math.random() * 50 });
+          await postTx({ userId: u, amount: 150 + Math.random() * 50 });
           await sleep(200);
         }
       }
@@ -67,16 +68,6 @@
       }
     },
     {
-      id: 'parallel-login', label: 'Parallel Login',
-      desc: '2 logins different devices',
-      run: async () => {
-        const u = uid();
-        await postAuth({ userId: u, deviceId: device(u), eventType: 'login', latitude: -23.5, longitude: -46.6 });
-        await sleep(100);
-        await postAuth({ userId: u, deviceId: device('random'), eventType: 'login', latitude: -8.0, longitude: -34.9 });
-      }
-    },
-    {
       id: 'faraway-login', label: 'Faraway Login',
       desc: 'SP → random destination',
       run: async () => {
@@ -87,17 +78,6 @@
         await postAuth({ userId: u, deviceId: device(u), eventType: 'login', latitude: dest.lat, longitude: dest.lon });
       }
     },
-    {
-      id: 'under-observation', label: 'Under Observation',
-      desc: '5+ transactions same account',
-      run: async () => {
-        const u = uid();
-        for (let i = 0; i < 6; i++) {
-          await postTx({ userId: u, amount: 200 + Math.random() * 100 });
-          await sleep(150);
-        }
-      }
-    }
   ];
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

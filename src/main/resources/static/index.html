@@ -15,7 +15,6 @@
       <a href="#alerts" class="nav-link">Live Alerts</a>
       <a href="#simulator" class="nav-link">Simulator</a>
       <a href="#create" class="nav-link">Create Event</a>
-      <a href="#queries" class="nav-link">Queries</a>
     </div>
     <div class="alert-badge" id="alertBadge" style="display:none">0</div>
   </nav>
@@ -117,28 +116,11 @@
       </form>
     </div>
 
-    <div id="page-queries" class="page">
-      <h1>State Store Queries</h1>
-      <section>
-        <h2>Faraway Login Store</h2>
-        <div class="query-row">
-          <input type="text" id="q-userId" placeholder="userId (e.g. u-000)">
-          <button id="q-faraway-btn" class="btn">Query</button>
-        </div>
-        <pre id="q-faraway-result" class="query-result"></pre>
-      </section>
-      <section>
-        <h2>Observation Store</h2>
-        <button id="q-obs-btn" class="btn">Fetch Observations</button>
-        <pre id="q-obs-result" class="query-result"></pre>
-      </section>
-    </div>
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/alerts.js"></script>
   <script src="/js/events.js"></script>
-  <script src="/js/queries.js"></script>
 </body>
 </html>
