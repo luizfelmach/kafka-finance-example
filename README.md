@@ -403,11 +403,11 @@ Each topology runs as an **independent `KafkaStreams` instance** with its own `a
 | # | Topology | `application.id` | Input | Logic | State |
 |---|----------|------------------|-------|-------|-------|
 | 1 | HighAmount | `fraud-detection-high-amount` | `transactions.raw` | Single tx > R$50,000 | Stateless |
-| 2 | Burst | `fraud-detection-burst` | `transactions.raw` | 5+ txs in 60s window | Tumbling Window |
+| 2 | Burst | `fraud-detection-burst` | `transactions.raw` | 5+ txs in 5-minute tumbling window | Tumbling Window |
 | 3 | UnknownDevice | `fraud-detection-unknown-device` | `transactions.raw` + `clients.profiles` | GlobalKTable join: device not in trusted list | GlobalKTable |
 | 4 | PasswordChange | `fraud-detection-password-change` | `auth.events` | `password_change` event | Stateless |
-| 5 | AccountTakeover | `fraud-detection-account-takeover` | `auth.events` + `transactions.raw` | KTable aggregate (login+pwChange) + KStream-KTable join (high tx) | KeyValueStore (`takeover-store`) |
-| 6 | EmptyingAccount | `fraud-detection-emptying-account` | `transactions.raw` | 5+ txs ≥ R$1,000 in 60s | Tumbling Window |
+| 5 | AccountTakeover | `fraud-detection-account-takeover` | `auth.events` + `transactions.raw` | KTable aggregate (login+pwChange with timestamps) + KStream-KTable join + **Allen's Before** relation | KeyValueStore (`takeover-store`) |
+| 6 | EmptyingAccount | `fraud-detection-emptying-account` | `transactions.raw` | Sliding window 10min: 3+ txs with balance < -R$1,000 | Sliding Window |
 | 7 | FarawayLogin | `fraud-detection-faraway-login` | `auth.events` | KTable aggregate (consecutive LoginPair) + toStream + flatMap: speed > 900 km/h | KeyValueStore (`last-login-store`) |
 
 ### 1. HighAmount
@@ -426,14 +426,14 @@ transactions.raw
 ```
 transactions.raw
   └── groupByKey()
-        └── windowedBy(TumblingWindow.of(Duration.ofSeconds(60)))
+        └── windowedBy(TumblingWindow.of(Duration.ofMinutes(5)))
               └── count()
                     └── filter(count >= 5)
                           └── map → FraudAlert.transactionBurst(...)
                                 └── to fraud.events
 ```
 
-Triggers `TRANSACTION_BURST` (severity: MEDIUM) when 5+ transactions occur in a 60-second window for the same account.
+Triggers `TRANSACTION_BURST` (severity: MEDIUM) when 5+ transactions occur in a 5-minute window for the same account.
 
 ### 3. UnknownDevice
 
@@ -465,18 +465,21 @@ Triggers `PASSWORD_CHANGE` (severity: LOW) on any `password_change` auth event. 
 auth.events
   └── groupByKey()
         └── aggregate(TakeoverState, ...) → KTable<String, TakeoverState>
-              login → loginSeen=true
-              password_change → pwChangeSeen=true
+              login → loginSeen=true, loginTimestamp=eventTime
+              password_change → pwChangeSeen=true, pwChangeTimestamp=eventTime
 
 transactions.raw
   └── filter(amount >= 5000) → KStream<String, TransactionEvent>
         └── join(authState KTable) → (tx, state)
-              ├── loginSeen && pwChangeSeen → FraudAlert.accountTakeover(tx)
+              ├── loginSeen && pwChangeSeen
+              │   └── Allen's Before: login < pwChange < tx.timestamp
+              │         ├── true  → FraudAlert.accountTakeover(tx)
+              │         └── false → null
               └── otherwise → null
                     └── filter(null) → fraud.events
 ```
 
-Uses a `KTable` aggregate (`groupByKey().aggregate()`) on `auth.events` to track which users have completed both steps (login + password change). Then joins this KTable with high-value transactions (`KStream-KTable` join). When a user has both flags set and performs a transaction of R$5,000+, triggers `ACCOUNT_TAKEOVER` (severity: CRITICAL).
+Uses a `KTable` aggregate (`groupByKey().aggregate()`) on `auth.events` to track which users have completed both steps (login + password change), storing event timestamps for temporal validation. Then joins this KTable with high-value transactions (`KStream-KTable` join). When a user has both flags set, performs a transaction of R$5,000+, and the **Allen's Before** relation holds (`loginTimestamp < pwChangeTimestamp < tx.timestamp`), triggers `ACCOUNT_TAKEOVER` (severity: CRITICAL). This ensures temporal ordering — the events must occur in the correct sequence.
 
 - State store: `takeover-store` (RocksDB, persistent)
 
@@ -484,16 +487,15 @@ Uses a `KTable` aggregate (`groupByKey().aggregate()`) on `auth.events` to track
 
 ```
 transactions.raw
-  └── filter(amount >= 1000)
-        └── groupByKey()
-              └── windowedBy(TumblingWindow.of(Duration.ofSeconds(60)))
-                    └── aggregate(AccountAggregate, ...)
-                          └── filter(count >= 5)
-                                └── map → FraudAlert.emptyingAccount(...)
-                                      └── to fraud.events
+  └── groupByKey()
+        └── windowedBy(SlidingWindow.of(Duration.ofMinutes(10)))
+              └── aggregate(AccountAggregate, ...)
+                    └── filter(count >= 3 && totalBalance < -1000)
+                          └── map → FraudAlert.emptyingAccount(...)
+                                └── to fraud.events
 ```
 
-Triggers `EMPTYING_ACCOUNT` (severity: HIGH) when 5+ transactions of at least R$1,000 occur in 60 seconds for the same account.
+Triggers `EMPTYING_ACCOUNT` (severity: HIGH) when 3+ transactions in a 10-minute sliding window result in a net balance decrease greater than R$1,000 for the same account.
 
 ### 7. FarawayLogin
 
@@ -546,7 +548,7 @@ A pure HTML + JS SPA (no framework), served by Spring Boot from `src/main/resour
 |------|-------|-------------|
 | Dashboard | `#dashboard` | Stats cards (alerts by severity) + recent alerts feed |
 | Live Alerts | `#alerts` | SSE alert feed + Leaflet map with geo markers |
-| Simulator | `#simulator` | One-click fraud scenario buttons |
+| Simulator | `#simulator` | One-click fraud scenario buttons + continuous simulation toggle |
 | Create Event | `#create` | Transaction form + simulated Login / Change Password UI |
 
 ### Live Alerts Map
@@ -563,6 +565,8 @@ A pure HTML + JS SPA (no framework), served by Spring Boot from `src/main/resour
 
 ### Simulator
 
+#### Fraud Scenarios
+
 One-click buttons for each fraud scenario:
 - **High Amount** — single tx > R$50,000
 - **Burst** — 5 rapid txs from the same user (fixed: previously used different users)
@@ -571,6 +575,14 @@ One-click buttons for each fraud scenario:
 - **Account Takeover** — login (unknown device) → password change → high-value tx
 - **Emptying Account** — 4 high-value txs from the same user
 - **Faraway Login** — 2 logins (SP + random destination) to trigger impossible travel
+
+#### Continuous Simulation
+
+A toggle button in the nav bar (`#navSimulate`) starts/stops an automatic event loop:
+- **~70%** chance of a `TransactionEvent` (R$150–200), **~30%** chance of an `AuthEvent`
+- Uses only trusted devices and home IPs — generates legitimate traffic
+- Delay between events: 500–1500ms (randomised)
+- Useful for keeping the SSE feed populated while developing without the CLI producers
 
 ### Create Event: Login
 
